@@ -99,15 +99,11 @@ export const CursiveOpening: React.FC<CursiveOpeningProps> = ({ onComplete, stan
 
   return (
     <div className="relative min-h-[480px] w-full flex flex-col items-center justify-center py-12 px-4 overflow-hidden select-none">
-      {/* Background paper texture & warm glow */}
-      <div className="absolute inset-0 bg-[#F5F0E6] pointer-events-none" />
-      <div className="absolute w-[600px] h-[300px] bg-[#E8DDC9]/50 rounded-full blur-3xl -top-20 pointer-events-none" />
-
       {/* Skip button for immediate access */}
       {!standalone && !isFinished && (
         <button
           onClick={handleSkip}
-          className="absolute top-6 right-6 z-20 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#8B735E] hover:text-[#493D35] bg-[#E8DDC9]/60 hover:bg-[#E8DDC9] rounded-md transition-colors border border-[#D6C4A8]/60"
+          className="ink-button-subtle absolute top-6 right-6 z-20 flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif font-bold"
         >
           <span>Skip to Login</span>
           <FastForward className="w-3.5 h-3.5" />

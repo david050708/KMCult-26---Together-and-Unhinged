@@ -128,27 +128,28 @@ export const HandwrittenTitle = forwardRef<HandwrittenTitleHandle, HandwrittenTi
   }));
 
   useEffect(() => {
-    if (!isDocked && progress === 0) {
-      const delay = setTimeout(() => {
+    // Try to run tracing until pathRef is available or component unmounts
+    let timeout: NodeJS.Timeout;
+    const tryRun = () => {
+      if (pathRef.current) {
         runWriting();
-      }, 300);
-      return () => clearTimeout(delay);
-    }
-  }, [isDocked]);
-
-  useEffect(() => {
-    return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      } else {
+        timeout = setTimeout(tryRun, 50);
+      }
     };
-  }, []);
+    if (!isDocked && progress === 0) {
+      timeout = setTimeout(tryRun, 300);
+    }
+    return () => clearTimeout(timeout);
+  }, [isDocked]);
 
   return (
     <div
       ref={containerRef}
-      className={`fixed z-50 select-none pointer-events-auto transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+      className={`select-none pointer-events-auto transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] ${
         isDocked
-          ? 'top-2.5 left-4 sm:left-6 md:left-8 translate-x-0 translate-y-0 scale-[0.38] origin-top-left'
-          : 'top-[36vh] left-1/2 -translate-x-1/2 -translate-y-1/2 scale-100 origin-center'
+          ? 'absolute z-40 top-2 left-4 sm:left-6 md:left-8 xl:left-[calc(50vw-640px+2rem)] translate-x-0 translate-y-0 scale-[0.25] origin-top-left'
+          : 'fixed z-[101] top-[36vh] left-1/2 -translate-x-1/2 -translate-y-1/2 scale-100 origin-center'
       }`}
       onClick={isDocked && onClickLogo ? onClickLogo : undefined}
       style={{ cursor: isDocked ? 'pointer' : 'default' }}
@@ -183,19 +184,17 @@ export const HandwrittenTitle = forwardRef<HandwrittenTitleHandle, HandwrittenTi
           />
 
           {/* The Actual Inked Stroke of "KMCult'26" */}
-          {pathRef.current && (
-            <path
-              d={cursiveTitlePath}
-              fill="none"
-              stroke="#493D35"
-              strokeWidth={isDocked ? 6.2 : 5.6}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray={pathRef.current.getTotalLength()}
-              strokeDashoffset={pathRef.current.getTotalLength() * (1 - progress)}
-              className="transition-[stroke-dashoffset] duration-75"
-            />
-          )}
+          <path
+            d={cursiveTitlePath}
+            fill="none"
+            stroke="#493D35"
+            strokeWidth={isDocked ? 6.2 : 5.6}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray={pathRef.current?.getTotalLength() || 0}
+            strokeDashoffset={pathRef.current ? pathRef.current.getTotalLength() * (1 - progress) : 0}
+            className="transition-[stroke-dashoffset] duration-75"
+          />
 
           {/* 
             SIMPLER WRITING-TIP ANIMATION (Requirement 3):

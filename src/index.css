@@ -21,46 +21,152 @@ body, button, input, textarea, select {
   font-family: var(--font-handwritten), cursive, sans-serif;
 }
 
-/* Realistic Crumpled Vintage Scrapbook Paper Texture */
-.bg-vintage-paper {
-  background-color: #F5F0E6;
-  background-image: 
-    linear-gradient(rgba(245, 240, 230, 0.22), rgba(245, 240, 230, 0.22)),
-    url('/src/assets/images/crumpled_ivory_paper_texture_1794154834602.jpg');
+/* Global Crumpled Paper Background */
+body {
+  background-image: url('/src/assets/images/crumpled_ivory_paper_texture_1794154834602.jpg');
   background-size: cover;
   background-position: center;
-  background-repeat: no-repeat;
   background-attachment: fixed;
+  background-repeat: no-repeat;
+  min-height: 100vh;
+  color: #221C18;
 }
 
-/* Layered Paper Card Surfaces */
-.scrapbook-paper-card {
-  background-color: #FCFBF7;
-  background-image: 
-    linear-gradient(rgba(252, 251, 247, 0.88), rgba(252, 251, 247, 0.88)),
-    url('/src/assets/images/crumpled_ivory_paper_texture_1794154834602.jpg');
+/* Paper-Craft Surfaces - Feels like opaque sheets of parchment / physical paper on the crumpled desk */
+.paper-sheet {
+  background-color: #F8F5EE;
+  background-image: url('/src/assets/images/crumpled_ivory_paper_texture_1794154834602.jpg');
   background-size: cover;
   background-position: center;
-  box-shadow: 0 12px 36px -4px rgba(73, 61, 53, 0.14), 0 4px 12px -2px rgba(73, 61, 53, 0.08);
-  border: 1px solid rgba(214, 196, 168, 0.7);
+  border: 1px solid #493D35;
+  box-shadow: 2px 3px 0px rgba(73, 61, 53, 0.15), 0 4px 12px rgba(73, 61, 53, 0.08);
 }
 
-/* Scrapbook photo frame styles */
+.paper-note {
+  background-color: #FAF7F0;
+  border: 1.5px solid #493D35;
+  box-shadow: 2px 2px 0px rgba(73, 61, 53, 0.2);
+  border-radius: 2px;
+}
+
+.paper-card {
+  background-color: #FBF9F4;
+  border: 1.5px solid #493D35;
+  box-shadow: 3px 3px 0px rgba(73, 61, 53, 0.18);
+  border-radius: 2px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.paper-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 4px 5px 0px rgba(73, 61, 53, 0.25);
+}
+
+/* Scrapbook Item: Polaroid/Photo Frame */
 .scrapbook-polaroid {
-  background-color: #FCFBF7;
-  background-image: 
-    linear-gradient(rgba(252, 251, 247, 0.92), rgba(252, 251, 247, 0.92)),
-    url('/src/assets/images/crumpled_ivory_paper_texture_1794154834602.jpg');
-  background-size: cover;
-  box-shadow: 0 6px 24px -2px rgba(73, 61, 53, 0.12), 0 2px 6px -1px rgba(73, 61, 53, 0.08);
-  border: 1px solid rgba(214, 196, 168, 0.5);
+  background-color: #FAF8F2;
+  border: 1.5px solid #493D35;
+  box-shadow: 3px 4px 0px rgba(73, 61, 53, 0.2);
+  border-radius: 2px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.scrapbook-tape {
-  background: rgba(232, 221, 201, 0.7);
-  backdrop-filter: blur(2px);
-  border: 1px dashed rgba(139, 115, 94, 0.25);
+.scrapbook-polaroid:hover {
+  transform: translateY(-3px) rotate(0.5deg);
+  box-shadow: 4px 6px 0px rgba(73, 61, 53, 0.25);
 }
+
+/* Paper Tape Graphic */
+.scrapbook-tape {
+  background-color: #E8DDC9;
+  border: 1px dashed rgba(73, 61, 53, 0.5);
+  box-shadow: 0 1px 2px rgba(73, 61, 53, 0.1);
+}
+
+/* Ink Outlined Button System - Hand-drawn outlined rectangles with transparent interior */
+.ink-button {
+  background-color: transparent !important;
+  border: 1.5px solid #493D35 !important;
+  color: #221C18 !important;
+  border-radius: 2px !important;
+  padding: 0.5rem 1.25rem;
+  font-family: var(--font-handwritten), cursive, sans-serif;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 1px 1px 0px rgba(73, 61, 53, 0.2);
+}
+
+.ink-button:hover:not(:disabled) {
+  background-color: rgba(73, 61, 53, 0.08) !important;
+  border-color: #2E2620 !important;
+  color: #1A1512 !important;
+  transform: translateY(-1.5px);
+  box-shadow: 2px 3px 0px rgba(73, 61, 53, 0.3);
+}
+
+.ink-button:active:not(:disabled) {
+  transform: translateY(0.5px);
+  box-shadow: 0px 0px 0px rgba(73, 61, 53, 0.2);
+  background-color: rgba(73, 61, 53, 0.14) !important;
+}
+
+.ink-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-style: dashed !important;
+}
+
+/* Secondary outline button (slightly lighter border, e.g. for secondary actions or tags) */
+.ink-button-subtle {
+  background-color: transparent !important;
+  border: 1px solid #8B735E !important;
+  color: #221C18 !important;
+  border-radius: 2px !important;
+  padding: 0.35rem 0.85rem;
+  font-family: var(--font-handwritten), cursive, sans-serif;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 1px 1px 0px rgba(73, 61, 53, 0.12);
+}
+
+.ink-button-subtle:hover:not(:disabled) {
+  background-color: rgba(139, 115, 94, 0.08) !important;
+  border-color: #493D35 !important;
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0px rgba(73, 61, 53, 0.2);
+}
+
+/* Ink Outlined Input System - Rectangular outlined borders, transparent interior revealing paper beneath */
+.ink-input, input[type="text"], input[type="password"], input[type="search"], textarea, select {
+  background-color: transparent !important;
+  border: 1.5px solid #493D35 !important;
+  color: #221C18 !important;
+  border-radius: 2px !important;
+  font-family: var(--font-handwritten), cursive, sans-serif;
+  box-shadow: inset 1px 1px 2px rgba(73, 61, 53, 0.06);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ink-input:focus, input[type="text"]:focus, input[type="password"]:focus, input[type="search"]:focus, textarea:focus, select:focus {
+  outline: none !important;
+  border-color: #2E2620 !important;
+  box-shadow: 2px 2px 0px rgba(73, 61, 53, 0.25) !important;
+}
+
+.ink-input::placeholder, input::placeholder, textarea::placeholder {
+  color: #8B735E !important;
+  opacity: 0.65;
+}
+
 
 /* Custom scrollbar for gallery and roster */
 ::-webkit-scrollbar {
@@ -77,3 +183,71 @@ body, button, input, textarea, select {
 ::-webkit-scrollbar-thumb:hover {
   background: #8B735E;
 }
+
+/* Smooth Vintage Entrance Keyframes & Animation Tokens */
+@keyframes vintageFadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes vintageScaleFade {
+  0% {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-vintage-fade-up {
+  animation: vintageFadeUp 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-vintage-scale-fade {
+  animation: vintageScaleFade 500ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Stagger Intervals for Coordinated Entrances */
+.animate-stagger-1 {
+  animation-delay: 90ms;
+}
+
+.animate-stagger-2 {
+  animation-delay: 180ms;
+}
+
+.animate-stagger-3 {
+  animation-delay: 270ms;
+}
+
+.animate-stagger-4 {
+  animation-delay: 360ms;
+}
+
+/* Reduced-Motion Accessibility Rules */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-vintage-fade-up,
+  .animate-vintage-scale-fade {
+    animation: opacityFade 200ms ease-out forwards !important;
+  }
+}
+
+@keyframes opacityFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+

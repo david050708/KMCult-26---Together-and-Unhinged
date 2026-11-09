@@ -52,19 +52,20 @@ export const MemoryPasswordModal: React.FC<MemoryPasswordModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-[#FCFBF7] w-full max-w-md rounded-xl border border-[#D6C4A8] shadow-2xl overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 animate-vintage-fade-up">
+      <div className="paper-sheet w-full max-w-md rounded-xs border-2 border-[#493D35] shadow-[5px_6px_0px_rgba(73,61,53,0.25)] overflow-hidden flex flex-col">
         {/* Header Strip */}
-        <div className="px-6 py-4 bg-[#E8DDC9]/80 border-b border-[#D6C4A8] flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-4 bg-[#E8DDC9] border-b-1.5 border-[#493D35] flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Lock className="w-4 h-4 text-[#8B735E]" />
+            <Lock className="w-4 h-4 text-[#493D35]" />
             <h3 className="font-serif font-bold text-sm text-[#493D35]">
               Memory Editing Passcode
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-[#8B735E] hover:text-[#493D35] rounded transition-colors"
+            aria-label="Close Passcode Modal"
+            className="p-1.5 text-[#493D35] hover:bg-[#493D35]/10 rounded-xs transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -85,8 +86,8 @@ export const MemoryPasswordModal: React.FC<MemoryPasswordModalProps> = ({
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5 text-xs text-red-800">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+            <div className="mb-4 p-3 bg-red-50/80 border border-red-700 rounded-xs flex items-start gap-2.5 text-xs text-red-900">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-700" />
               <span>{error}</span>
             </div>
           )}
@@ -103,7 +104,7 @@ export const MemoryPasswordModal: React.FC<MemoryPasswordModalProps> = ({
                 placeholder="Enter editing password..."
                 autoFocus
                 required
-                className="w-full px-3.5 py-2.5 bg-white border border-[#D6C4A8] rounded-lg text-xs text-[#493D35] placeholder:text-[#8B735E]/50 focus:outline-none focus:ring-1 focus:ring-[#8B735E]"
+                className="w-full px-3.5 py-2.5 text-xs text-[#493D35]"
               />
             </div>
 
@@ -111,7 +112,7 @@ export const MemoryPasswordModal: React.FC<MemoryPasswordModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-3 py-2 text-xs font-medium text-[#8B735E] hover:text-[#493D35]"
+                className="ink-button-subtle text-xs"
               >
                 Cancel
               </button>
@@ -119,7 +120,7 @@ export const MemoryPasswordModal: React.FC<MemoryPasswordModalProps> = ({
               <button
                 type="submit"
                 disabled={loading || !password}
-                className="px-4 py-2 bg-[#493D35] hover:bg-[#382E28] text-[#F5F0E6] rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-xs"
+                className="ink-button text-xs font-semibold"
               >
                 <Unlock className="w-3.5 h-3.5" />
                 <span>{loading ? 'Verifying...' : 'Unlock Editing'}</span>
@@ -127,7 +128,7 @@ export const MemoryPasswordModal: React.FC<MemoryPasswordModalProps> = ({
             </div>
           </form>
 
-          <div className="mt-5 pt-3 border-t border-[#D6C4A8]/40 text-[11px] text-[#8B735E]/80 flex items-center gap-1.5">
+          <div className="mt-5 pt-3 border-t border-[#493D35]/20 text-[11px] text-[#8B735E] flex items-center gap-1.5">
             <Shield className="w-3.5 h-3.5 text-[#66715C] shrink-0" />
             <span>Public viewing is always unlocked. Passcode is only required for modifications.</span>
           </div>

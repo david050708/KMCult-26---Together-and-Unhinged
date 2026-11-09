@@ -54,7 +54,7 @@ export const StationeryAgent: React.FC<StationeryAgentProps> = ({
         {/* Small stationery label badge */}
         {label && (
           <div
-            className="absolute -top-12 left-10 bg-[#FCFBF7]/90 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] font-mono font-medium text-[#493D35] border border-[#D6C4A8] shadow-xs whitespace-nowrap"
+            className="absolute -top-12 left-10 bg-[#FAF6EE] px-2 py-0.5 rounded-xs text-[10px] font-mono font-medium text-[#493D35] border border-[#493D35] shadow-[2px_2px_0px_rgba(73,61,53,0.2)] whitespace-nowrap"
             style={{ transform: `rotate(${-angle}deg)` }}
           >
             {label}

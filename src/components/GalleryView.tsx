@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Memory, Student } from '../types/index.ts';
-import { hasMemoryToken, clearMemoryToken, getStorageUsage, type StorageMetrics } from '../services/api.ts';
+import { hasMemoryToken, clearMemoryToken, getStorageUsage, bulkDeleteMemories, type StorageMetrics } from '../services/api.ts';
 import { MemoryPasswordModal } from './MemoryPasswordModal.tsx';
+import { CleanupDialog } from './CleanupDialog.tsx';
 import { StorageUsageBar } from './StorageUsageBar.tsx';
+import { StorageResetModal } from './StorageResetModal.tsx';
 import {
   FolderPlus,
   Sparkles,
@@ -35,11 +37,13 @@ interface GalleryViewProps {
     date: string;
     category: string;
     password: string;
+    reconstructionMode?: 'original' | 'oil_painting';
     initialPhotos?: { url: string; caption?: string; location?: string; taggedStudentIds?: string[] }[];
   }) => Promise<void>;
   onUpdateMemory: (id: string, data: { title?: string; description?: string; date?: string; category?: string; coverPhotoId?: string }) => Promise<void>;
   onDeleteMemory: (id: string) => Promise<void>;
   onAddPhotos: (memoryId: string, photos: { url: string; caption?: string }[]) => Promise<void>;
+  onRefresh?: () => Promise<void>;
 }
 
 export const GalleryView: React.FC<GalleryViewProps> = ({
@@ -49,13 +53,15 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
   onCreateMemory,
   onUpdateMemory,
   onDeleteMemory,
-  onAddPhotos
+  onAddPhotos,
+  onRefresh
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
   // Modal states
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isCleanupOpen, setIsCleanupOpen] = useState(false);
   const [editingMemory, setEditingMemory] = useState<Memory | null>(null);
   const [addingPhotosToMemory, setAddingPhotosToMemory] = useState<Memory | null>(null);
 
@@ -73,6 +79,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
   const [newCategory, setNewCategory] = useState('Clinical Postings');
   const [newPassword, setNewPassword] = useState('');
   const [newConfirmPassword, setNewConfirmPassword] = useState('');
+  const [reconstructionMode, setReconstructionMode] = useState<'original' | 'oil_painting'>('oil_painting');
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const [newPhotoUrl, setNewPhotoUrl] = useState('');
@@ -126,10 +133,10 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
       reader.onload = (event) => {
         const url = event.target?.result as string;
         if (target === 'create') {
-          setStagedPhotos((prev) => [...prev, { url, caption: file.name.replace(/\.[^/.]+$/, '') }]);
+          setStagedPhotos((prev) => [...prev, { url, caption: '' }]);
         } else {
           setQuickPhotoUrl(url);
-          setQuickPhotoCaption(file.name.replace(/\.[^/.]+$/, ''));
+          setQuickPhotoCaption('');
         }
       };
       reader.readAsDataURL(file);
@@ -159,6 +166,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
         date: newDate.trim() || new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
         category: newCategory,
         password: newPassword,
+        reconstructionMode,
         initialPhotos: stagedPhotos
       });
       await refreshStorage();
@@ -213,12 +221,13 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
   const [storageError, setStorageError] = useState<string | null>(null);
   const [isFetchingStorage, setIsFetchingStorage] = useState(false);
   const [deletingMemoryId, setDeletingMemoryId] = useState<string | null>(null);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
-  const refreshStorage = async () => {
+  const refreshStorage = async (forceFresh: boolean = true) => {
     setIsFetchingStorage(true);
     setStorageError(null);
     try {
-      const data = await getStorageUsage();
+      const data = await getStorageUsage(forceFresh);
       setStorageMetrics(data);
     } catch (err: any) {
       console.warn('Could not refresh storage metrics:', err);
@@ -322,7 +331,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen pb-20 bg-[#F5F0E6] bg-vintage-paper selection:bg-[#D6C4A8]">
+    <div className="min-h-screen pb-20 selection:bg-[#D6C4A8]">
       {/* Top Hero Banner */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-6">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-[#D6C4A8]">
@@ -340,12 +349,19 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
 
           <div className="flex items-center gap-3 shrink-0">
             <button
+              onClick={() => setIsCleanupOpen(true)}
+              className="ink-button-subtle text-xs uppercase tracking-wider px-4 py-2.5 font-semibold"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Clear Memories</span>
+            </button>
+            <button
               onClick={() => {
                 setPasswordError(null);
                 setIsCreateOpen(true);
               }}
               disabled={storageMetrics?.isLimitReached}
-              className="px-4 py-2.5 bg-[#493D35] hover:bg-[#382E28] disabled:opacity-50 text-[#F5F0E6] rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-xs cursor-pointer"
+              className="ink-button text-xs uppercase tracking-wider px-4 py-2.5 font-semibold"
             >
               <FolderPlus className="w-4 h-4" />
               <span>Create Memory</span>
@@ -360,6 +376,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
             error={storageError}
             isLoading={isFetchingStorage}
             onRefresh={refreshStorage}
+            onOpenReset={() => setIsResetModalOpen(true)}
           />
         </div>
 
@@ -367,13 +384,13 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
         {memories.length > 0 && (
           <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
             {/* Category Tabs */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
               <button
                 onClick={() => setCategoryFilter('all')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
+                className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer ${
                   categoryFilter === 'all'
-                    ? 'bg-[#E8DDC9] text-[#493D35] font-semibold border border-[#D6C4A8]'
-                    : 'text-[#8B735E] hover:text-[#493D35] hover:bg-[#E8DDC9]/40'
+                    ? 'border-b-2 border-[#493D35] text-[#493D35] font-bold'
+                    : 'text-[#8B735E] hover:text-[#493D35] border-b-2 border-transparent'
                 }`}
               >
                 All Memories ({memories.length})
@@ -382,10 +399,10 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 <button
                   key={cat}
                   onClick={() => setCategoryFilter(cat)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
+                  className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
                     categoryFilter === cat
-                      ? 'bg-[#E8DDC9] text-[#493D35] font-semibold border border-[#D6C4A8]'
-                      : 'text-[#8B735E] hover:text-[#493D35] hover:bg-[#E8DDC9]/40'
+                      ? 'border-b-2 border-[#493D35] text-[#493D35] font-bold'
+                      : 'text-[#8B735E] hover:text-[#493D35] border-b-2 border-transparent'
                   }`}
                 >
                   {cat}
@@ -395,13 +412,13 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
 
             {/* Search Box */}
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-[#8B735E]" />
+              <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-[#8B735E] pointer-events-none" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search memories..."
-                className="w-full pl-9 pr-3.5 py-1.5 bg-white border border-[#D6C4A8] rounded-lg text-xs text-[#493D35] placeholder:text-[#8B735E]/60 focus:outline-none focus:ring-1 focus:ring-[#8B735E]"
+                className="w-full pl-9 pr-3.5 py-1.5 text-xs text-[#493D35]"
               />
             </div>
           </div>
@@ -412,7 +429,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {memories.length === 0 ? (
           /* NOSTALGIC SCRAPBOOK EMPTY STATE (Zero AI photos requirement §1) */
-          <div className="my-10 max-w-2xl mx-auto p-8 sm:p-12 bg-[#FCFBF7] border border-[#D6C4A8] rounded-2xl shadow-[0_6px_24px_rgba(73,61,53,0.06)] text-center relative overflow-hidden">
+          <div className="my-10 max-w-2xl mx-auto p-8 sm:p-12 paper-note border border-[#D6C4A8] rounded-2xl shadow-[0_6px_24px_rgba(73,61,53,0.06)] text-center relative overflow-hidden">
             {/* Vintage Paper Corner Decors */}
             <div className="absolute top-3 left-3 w-8 h-8 border-t-2 border-l-2 border-[#D6C4A8] pointer-events-none" />
             <div className="absolute top-3 right-3 w-8 h-8 border-t-2 border-r-2 border-[#D6C4A8] pointer-events-none" />
@@ -461,7 +478,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
             </div>
           </div>
         ) : filteredMemories.length === 0 ? (
-          <div className="my-12 p-12 bg-[#FCFBF7] border border-dashed border-[#D6C4A8] rounded-xl text-center">
+          <div className="my-12 p-12 paper-note border border-dashed border-[#D6C4A8] rounded-xl text-center">
             <p className="text-sm font-serif text-[#493D35]">No memory folders match your query.</p>
             <p className="mt-1 text-xs text-[#8B735E]">Try adjusting your search terms or category selection.</p>
             <button
@@ -485,16 +502,29 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
               return (
                 <div
                   key={memory.id}
-                  className="relative group bg-[#FCFBF7] rounded-xl border border-[#D6C4A8] shadow-[0_4px_16px_rgba(73,61,53,0.06)] hover:shadow-[0_12px_28px_rgba(73,61,53,0.12)] transition-all duration-300 flex flex-col overflow-hidden"
+                  className="relative group paper-card flex flex-col overflow-hidden"
                 >
                   {/* Manila Folder Tab Top */}
-                  <div className="bg-[#E8DDC9]/80 px-5 py-2.5 border-b border-[#D6C4A8] flex items-center justify-between">
+                  <div className="bg-[#E8DDC9] px-5 py-2.5 border-b-1.5 border-[#493D35] flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] uppercase tracking-wider font-semibold text-[#8B735E]">
+                      <span className="text-[11px] uppercase tracking-wider font-bold text-[#493D35]">
                         {memory.category || 'Memory Folder'}
                       </span>
+                      <span className="text-[10px] font-serif font-bold text-[#8B735E] border border-[#493D35]/40 px-1.5 py-0.5 rounded-xs flex items-center gap-1">
+                        {memory.reconstructionMode === 'original' ? (
+                          <>
+                            <Camera className="w-2.5 h-2.5 text-[#493D35]" />
+                            <span>Photo</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-2.5 h-2.5 text-[#8B735E]" />
+                            <span>Oil Paint</span>
+                          </>
+                        )}
+                      </span>
                       {isUnlocked && (
-                        <span className="inline-flex items-center gap-1 text-[10px] text-[#66715C] font-semibold bg-[#66715C]/15 px-1.5 py-0.5 rounded" title="Editing unlocked for this session">
+                        <span className="inline-flex items-center gap-1 text-[10px] text-[#493D35] font-bold border border-[#493D35] px-1.5 py-0.5 rounded-xs" title="Editing unlocked for this session">
                           <Unlock className="w-2.5 h-2.5" />
                           <span>Unlocked</span>
                         </span>
@@ -508,7 +538,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                             e.stopPropagation();
                             setActiveMenuId(activeMenuId === memory.id ? null : memory.id);
                           }}
-                          className="p-1 text-[#8B735E] hover:text-[#493D35] rounded transition-colors"
+                          className="p-1 text-[#493D35] hover:bg-[#493D35]/10 rounded-xs transition-colors"
                           title="Folder Edit Actions"
                         >
                           <MoreVertical className="w-4 h-4" />
@@ -517,35 +547,35 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                         {/* Dropdown Menu (Only visible when unlocked) */}
                         {activeMenuId === memory.id && (
                           <div
-                            className="absolute right-0 top-7 w-48 bg-white border border-[#D6C4A8] rounded-lg shadow-lg z-20 py-1 text-xs font-medium text-[#493D35]"
+                            className="absolute right-0 top-7 w-48 paper-sheet border-1.5 border-[#493D35] shadow-[3px_4px_0px_rgba(73,61,53,0.2)] z-20 py-1 text-xs font-medium text-[#493D35]"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <button
                               onClick={() => handleRequestEdit(memory)}
-                              className="w-full text-left px-3 py-2 hover:bg-[#F5F0E6] flex items-center gap-2"
+                              className="w-full text-left px-3 py-2 hover:bg-[#493D35]/10 flex items-center gap-2"
                             >
                               <Edit2 className="w-3.5 h-3.5 text-[#8B735E]" />
                               <span>Edit Folder Info</span>
                             </button>
                             <button
                               onClick={() => handleRequestAddPhotos(memory)}
-                              className="w-full text-left px-3 py-2 hover:bg-[#F5F0E6] flex items-center gap-2"
+                              className="w-full text-left px-3 py-2 hover:bg-[#493D35]/10 flex items-center gap-2"
                             >
                               <ImagePlus className="w-3.5 h-3.5 text-[#8B735E]" />
                               <span>Add Photographs</span>
                             </button>
-                            <div className="border-t border-[#D6C4A8]/40 my-1" />
+                            <div className="border-t border-[#493D35]/30 my-1" />
                             <button
                               onClick={() => {
                                 setActiveMenuId(null);
                                 clearMemoryToken(memory.id);
                               }}
-                              className="w-full text-left px-3 py-2 hover:bg-[#F5F0E6] text-[#8B735E] flex items-center gap-2"
+                              className="w-full text-left px-3 py-2 hover:bg-[#493D35]/10 text-[#8B735E] flex items-center gap-2"
                             >
                               <Lock className="w-3.5 h-3.5" />
                               <span>Lock Editing Session</span>
                             </button>
-                            <div className="border-t border-[#D6C4A8]/40 my-1" />
+                            <div className="border-t border-[#493D35]/30 my-1" />
                             <button
                               onClick={() => handleRequestDelete(memory)}
                               disabled={deletingMemoryId === memory.id}
@@ -567,7 +597,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                             pendingAction: 'edit'
                           });
                         }}
-                        className="p-1 text-[#8B735E]/70 hover:text-[#493D35] rounded transition-colors"
+                        className="p-1 text-[#8B735E] hover:text-[#493D35] rounded transition-colors"
                         title="Unlock editing for this memory"
                       >
                         <Lock className="w-3.5 h-3.5" />
@@ -578,14 +608,14 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                   {/* Cover Photo Slot */}
                   <div
                     onClick={() => onOpenMemory(memory)}
-                    className="relative aspect-[16/10] bg-[#E8DDC9]/40 overflow-hidden cursor-pointer group"
+                    className="relative aspect-[16/10] bg-[#FAF8F2] border-b border-[#493D35]/30 overflow-hidden cursor-pointer group"
                   >
                     {memory.coverPhotoUrl ? (
                       <img
                         src={memory.coverPhotoUrl}
                         alt={memory.title}
                         referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-102"
                       />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-[#8B735E] p-4 text-center">
@@ -595,14 +625,10 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                       </div>
                     )}
 
-                    {/* Subtle photo corner effect */}
-                    <div className="absolute top-2 left-2 w-5 h-5 border-t-2 border-l-2 border-[#E8DDC9] opacity-80 pointer-events-none" />
-                    <div className="absolute bottom-2 right-2 w-5 h-5 border-b-2 border-r-2 border-[#E8DDC9] opacity-80 pointer-events-none" />
-
                     {/* Hover Swarm preview overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#493D35]/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
-                      <span className="text-xs font-semibold text-[#F5F0E6] flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-[#D6C4A8]" />
+                    <div className="absolute inset-0 bg-[#493D35]/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end p-4">
+                      <span className="text-xs font-semibold text-[#F8F5EE] flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-[#F8F5EE]" />
                         Enter Swarm Reconstruction
                         <ArrowUpRight className="w-3.5 h-3.5" />
                       </span>
@@ -614,20 +640,20 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                     <div>
                       <h3
                         onClick={() => onOpenMemory(memory)}
-                        className="text-base font-serif font-bold text-[#493D35] hover:text-[#8B735E] transition-colors cursor-pointer"
+                        className="text-base font-serif font-bold text-[#493D35] hover:underline transition-colors cursor-pointer"
                       >
                         {memory.title}
                       </h3>
 
                       {memory.description && (
-                        <p className="mt-1.5 text-xs text-[#8B735E] line-clamp-2 leading-relaxed">
+                        <p className="mt-1.5 text-xs text-[#8B735E] line-clamp-2 leading-relaxed font-handwritten">
                           {memory.description}
                         </p>
                       )}
                     </div>
 
                     {/* Unboxed Metadata (Zero-Pill Discipline per §1.A) */}
-                    <div className="mt-4 pt-3 border-t border-[#D6C4A8]/50 flex items-center justify-between text-xs text-[#8B735E]">
+                    <div className="mt-4 pt-3 border-t border-[#493D35]/20 flex items-center justify-between text-xs text-[#8B735E]">
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-[#8B735E]/70" />
                         <span>{memory.date}</span>
@@ -647,7 +673,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                     <div className="mt-4 pt-1">
                       <button
                         onClick={() => onOpenMemory(memory)}
-                        className="w-full py-2 bg-[#E8DDC9] hover:bg-[#D6C4A8] text-[#493D35] text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors flex items-center justify-center gap-2 border border-[#D6C4A8]/60"
+                        className="ink-button w-full text-xs font-semibold uppercase tracking-wider py-2"
                       >
                         <Sparkles className="w-3.5 h-3.5 text-[#66715C]" />
                         <span>Launch Swarm Reconstruction</span>
@@ -663,19 +689,23 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
 
       {/* CREATE MEMORY MODAL (WITH MEMORY PASSCODE) */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#FCFBF7] w-full max-w-xl rounded-xl border border-[#D6C4A8] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-            <div className="px-6 py-4 bg-[#E8DDC9]/70 border-b border-[#D6C4A8] flex items-center justify-between">
-              <h2 className="font-serif text-lg font-bold text-[#493D35]">Create New Memory Folder</h2>
-              <button onClick={() => setIsCreateOpen(false)} className="p-1 text-[#8B735E] hover:text-[#493D35]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 animate-vintage-fade-up">
+          <div className="paper-sheet w-full max-w-xl rounded-xs border-2 border-[#493D35] shadow-[5px_6px_0px_rgba(73,61,53,0.25)] overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="px-4 sm:px-6 py-4 bg-[#E8DDC9] border-b-1.5 border-[#493D35] flex items-center justify-between">
+              <h2 className="font-serif text-base sm:text-lg font-bold text-[#493D35]">Create New Memory Folder</h2>
+              <button
+                onClick={() => setIsCreateOpen(false)}
+                aria-label="Close Create Memory Modal"
+                className="p-1.5 text-[#493D35] hover:bg-[#493D35]/10 rounded-xs transition-colors cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleCreateSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
               {passwordError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5 text-xs text-red-800">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+                <div className="p-3 bg-red-50/80 border border-red-700 rounded-xs flex items-start gap-2.5 text-xs text-red-900">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-700" />
                   <span>{passwordError}</span>
                 </div>
               )}
@@ -690,7 +720,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                   onChange={(e) => setNewTitle(e.target.value)}
                   placeholder="e.g. Anatomy Hall & The First Dissections"
                   required
-                  className="w-full px-3 py-2 bg-white border border-[#D6C4A8] rounded-lg text-xs text-[#493D35] focus:outline-none focus:ring-1 focus:ring-[#8B735E]"
+                  className="w-full px-3 py-2 text-xs text-[#493D35]"
                 />
               </div>
 
@@ -782,19 +812,93 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 </div>
               </div>
 
-              {/* Initial Photo Staging */}
-              <div className="pt-2 border-t border-[#D6C4A8]/40">
-                <label className="block font-semibold uppercase tracking-wider text-[#493D35] mb-1.5">
-                  Add Initial Photographs ({stagedPhotos.length})
-                </label>
+              {/* Dual Reconstruction Mode Selection (PART A) */}
+              <div className="p-3.5 bg-[#FAF6EE] border-1.5 border-[#493D35] rounded-xs space-y-2.5">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-[#8B735E]" />
+                  <span className="font-serif font-bold uppercase tracking-wider text-[#493D35]">
+                    Swarm Reconstruction Mode *
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#8B735E] leading-relaxed">
+                  Choose how your uploaded photographs will be reconstructed by the agent swarm:
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Option 1: Original Image Mode */}
+                  <div
+                    onClick={() => setReconstructionMode('original')}
+                    className={`p-3 rounded-xs border-1.5 cursor-pointer transition-all ${
+                      reconstructionMode === 'original'
+                        ? 'bg-[#E8DDC9] border-[#493D35] shadow-[2px_3px_0px_rgba(73,61,53,0.25)]'
+                        : 'bg-white/80 border-[#493D35]/30 hover:border-[#493D35]/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-1.5 font-serif font-bold text-xs text-[#493D35]">
+                        <Camera className="w-3.5 h-3.5 text-[#493D35]" />
+                        <span>Original Image</span>
+                      </div>
+                      <input
+                        type="radio"
+                        name="reconstructionMode"
+                        checked={reconstructionMode === 'original'}
+                        onChange={() => setReconstructionMode('original')}
+                        className="accent-[#493D35]"
+                      />
+                    </div>
+                    <p className="text-[10px] text-[#8B735E] leading-normal">
+                      Reconstruct the original photograph through our swarm of agents, preserving its natural photographic appearance and crisp details.
+                    </p>
+                  </div>
+
+                  {/* Option 2: Oil Painting Mode */}
+                  <div
+                    onClick={() => setReconstructionMode('oil_painting')}
+                    className={`p-3 rounded-xs border-1.5 cursor-pointer transition-all ${
+                      reconstructionMode === 'oil_painting'
+                        ? 'bg-[#E8DDC9] border-[#493D35] shadow-[2px_3px_0px_rgba(73,61,53,0.25)]'
+                        : 'bg-white/80 border-[#493D35]/30 hover:border-[#493D35]/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-1.5 font-serif font-bold text-xs text-[#493D35]">
+                        <Sparkles className="w-3.5 h-3.5 text-[#8B735E]" />
+                        <span>Oil Painting</span>
+                      </div>
+                      <input
+                        type="radio"
+                        name="reconstructionMode"
+                        checked={reconstructionMode === 'oil_painting'}
+                        onChange={() => setReconstructionMode('oil_painting')}
+                        className="accent-[#493D35]"
+                      />
+                    </div>
+                    <p className="text-[10px] text-[#8B735E] leading-normal">
+                      Watch multiple agents transform your photograph into a detailed traditional oil painting with rich layered impasto brushwork.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Initial Photo Staging with Individual Descriptions */}
+              <div className="pt-2 border-t border-[#493D35]/30">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="font-semibold uppercase tracking-wider text-[#493D35]">
+                    Photographs ({stagedPhotos.length})
+                  </label>
+                  <span className="text-[11px] text-[#8B735E] italic">
+                    Add individual descriptions before submit
+                  </span>
+                </div>
 
                 <div className="flex gap-2 mb-2">
                   <input
                     type="text"
                     value={newPhotoUrl}
                     onChange={(e) => setNewPhotoUrl(e.target.value)}
-                    placeholder="Paste image link or upload below..."
-                    className="flex-1 px-3 py-1.5 bg-white border border-[#D6C4A8] rounded-lg text-xs text-[#493D35]"
+                    placeholder="Paste direct image link..."
+                    className="flex-1 px-3 py-1.5 bg-white border border-[#493D35]/30 rounded-xs text-xs text-[#493D35]"
                   />
                   <button
                     type="button"
@@ -805,16 +909,16 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                         setNewPhotoCaption('');
                       }
                     }}
-                    className="px-3 py-1.5 bg-[#E8DDC9] hover:bg-[#D6C4A8] text-[#493D35] rounded-lg font-medium"
+                    className="ink-button-subtle text-xs px-3 py-1.5"
                   >
                     Add Link
                   </button>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <label className="px-3 py-1.5 bg-white border border-[#D6C4A8] hover:bg-[#F5F0E6] rounded-lg text-xs font-medium text-[#493D35] cursor-pointer flex items-center gap-1.5">
-                    <Upload className="w-3.5 h-3.5 text-[#8B735E]" />
-                    <span>Upload Local File</span>
+                <div className="flex items-center gap-3 mb-3">
+                  <label className="ink-button-subtle inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif font-bold cursor-pointer">
+                    <Upload className="w-3.5 h-3.5 text-[#493D35]" />
+                    <span>Upload multiple files</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -826,16 +930,35 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 </div>
 
                 {stagedPhotos.length > 0 && (
-                  <div className="mt-3 flex gap-2 overflow-x-auto p-2 bg-[#F5F0E6] rounded-lg border border-[#D6C4A8]/50">
+                  <div className="space-y-2 max-h-60 overflow-y-auto p-2 bg-[#FAF8F2] rounded-xs border border-[#493D35]/30">
                     {stagedPhotos.map((p, idx) => (
-                      <div key={idx} className="relative w-16 h-16 shrink-0 rounded overflow-hidden border border-[#D6C4A8]">
-                        <img src={p.url} alt="Staged" className="w-full h-full object-cover" />
+                      <div key={idx} className="flex items-start gap-3 p-2 bg-[#E8DDC9]/30 rounded-xs border border-[#493D35]/20">
+                        <div className="relative w-16 h-16 shrink-0 rounded-xs overflow-hidden border border-[#493D35]/40 bg-white">
+                          <img src={p.url} alt={`Staged photo ${idx + 1}`} className="w-full h-full object-cover" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <label className="block text-[10px] font-semibold uppercase tracking-wider text-[#493D35] mb-1">
+                            Photo {idx + 1} Description
+                          </label>
+                          <input
+                            type="text"
+                            value={p.caption || ''}
+                            onChange={(e) => {
+                              const updated = [...stagedPhotos];
+                              updated[idx] = { ...updated[idx], caption: e.target.value };
+                              setStagedPhotos(updated);
+                            }}
+                            placeholder="Add description (optional)..."
+                            className="w-full px-2.5 py-1.5 text-xs text-[#493D35] bg-white border border-[#493D35]/30 rounded-xs font-handwritten"
+                          />
+                        </div>
                         <button
                           type="button"
                           onClick={() => setStagedPhotos(stagedPhotos.filter((_, i) => i !== idx))}
-                          className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5"
+                          className="p-1.5 text-[#8B735E] hover:text-red-700 transition-colors"
+                          title="Remove photograph"
                         >
-                          <X className="w-2.5 h-2.5" />
+                          <X className="w-4 h-4" />
                         </button>
                       </div>
                     ))}
@@ -843,18 +966,18 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 )}
               </div>
 
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#D6C4A8]">
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#493D35]/30">
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-[#8B735E] hover:text-[#493D35]"
+                  className="ink-button-subtle text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting || !newTitle.trim()}
-                  className="px-4 py-2 bg-[#493D35] hover:bg-[#382E28] text-[#F5F0E6] rounded-lg font-semibold disabled:opacity-50"
+                  className="ink-button text-xs font-semibold"
                 >
                   {isSubmitting ? 'Creating...' : 'Create Folder'}
                 </button>
@@ -866,18 +989,22 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
 
       {/* EDIT MEMORY MODAL */}
       {editingMemory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#FCFBF7] w-full max-w-xl rounded-xl border border-[#D6C4A8] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 bg-[#E8DDC9]/70 border-b border-[#D6C4A8] flex items-center justify-between">
-              <h2 className="font-serif text-lg font-bold text-[#493D35]">Edit Memory Details</h2>
-              <button onClick={() => setEditingMemory(null)} className="p-1 text-[#8B735E] hover:text-[#493D35]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 animate-vintage-fade-up">
+          <div className="paper-sheet w-full max-w-xl rounded-xs border-2 border-[#493D35] shadow-[5px_6px_0px_rgba(73,61,53,0.25)] overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-4 sm:px-6 py-4 bg-[#E8DDC9] border-b-1.5 border-[#493D35] flex items-center justify-between">
+              <h2 className="font-serif text-base sm:text-lg font-bold text-[#493D35]">Edit Memory Details</h2>
+              <button
+                onClick={() => setEditingMemory(null)}
+                aria-label="Close Edit Memory Modal"
+                className="p-1.5 text-[#493D35] hover:bg-[#493D35]/10 rounded-xs transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleEditSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
               <div>
-                <label className="block font-semibold uppercase tracking-wider text-[#493D35] mb-1">
+                <label className="block font-serif font-bold uppercase tracking-wider text-[#493D35] mb-1">
                   Title
                 </label>
                 <input
@@ -885,51 +1012,51 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
                   required
-                  className="w-full px-3 py-2 bg-white border border-[#D6C4A8] rounded-lg text-xs text-[#493D35]"
+                  className="w-full px-3 py-2 bg-transparent border-1.5 border-[#493D35] rounded-xs text-xs text-[#493D35]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold uppercase tracking-wider text-[#493D35] mb-1">
+                  <label className="block font-serif font-bold uppercase tracking-wider text-[#493D35] mb-1">
                     Date / Period
                   </label>
                   <input
                     type="text"
                     value={editDate}
                     onChange={(e) => setEditDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-[#D6C4A8] rounded-lg text-xs text-[#493D35]"
+                    className="w-full px-3 py-2 bg-transparent border-1.5 border-[#493D35] rounded-xs text-xs text-[#493D35]"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold uppercase tracking-wider text-[#493D35] mb-1">
+                  <label className="block font-serif font-bold uppercase tracking-wider text-[#493D35] mb-1">
                     Category
                   </label>
                   <input
                     type="text"
                     value={editCategory}
                     onChange={(e) => setEditCategory(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-[#D6C4A8] rounded-lg text-xs text-[#493D35]"
+                    className="w-full px-3 py-2 bg-transparent border-1.5 border-[#493D35] rounded-xs text-xs text-[#493D35]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold uppercase tracking-wider text-[#493D35] mb-1">
+                <label className="block font-serif font-bold uppercase tracking-wider text-[#493D35] mb-1">
                   Description
                 </label>
                 <textarea
                   value={editDesc}
                   onChange={(e) => setEditDesc(e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 bg-white border border-[#D6C4A8] rounded-lg text-xs text-[#493D35]"
+                  className="w-full px-3 py-2 bg-transparent border-1.5 border-[#493D35] rounded-xs text-xs text-[#493D35]"
                 />
               </div>
 
               {/* Cover Photo Selection */}
               {editingMemory.photos.length > 0 && (
                 <div>
-                  <label className="block font-semibold uppercase tracking-wider text-[#493D35] mb-1.5">
+                  <label className="block font-serif font-bold uppercase tracking-wider text-[#493D35] mb-1.5">
                     Select Cover Photograph
                   </label>
                   <div className="grid grid-cols-4 gap-2">
@@ -940,8 +1067,8 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                           key={p.id}
                           type="button"
                           onClick={() => setEditCoverPhotoId(p.id)}
-                          className={`relative aspect-square rounded overflow-hidden border-2 transition-all ${
-                            isSelected ? 'border-[#493D35] ring-2 ring-[#8B735E]' : 'border-transparent opacity-70 hover:opacity-100'
+                          className={`relative aspect-square rounded-xs overflow-hidden border-2 transition-all cursor-pointer ${
+                            isSelected ? 'border-[#493D35] ring-2 ring-[#493D35]' : 'border-transparent opacity-70 hover:opacity-100'
                           }`}
                         >
                           <img src={p.url} alt="" className="w-full h-full object-cover" />
@@ -952,18 +1079,18 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 </div>
               )}
 
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#D6C4A8]">
+              <div className="pt-4 flex items-center justify-end gap-3 border-t-1.5 border-[#493D35]">
                 <button
                   type="button"
                   onClick={() => setEditingMemory(null)}
-                  className="px-4 py-2 text-xs font-medium text-[#8B735E]"
+                  className="ink-button-subtle text-xs py-2 px-4"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-2 bg-[#493D35] hover:bg-[#382E28] text-[#F5F0E6] rounded-lg font-semibold"
+                  className="ink-button text-xs py-2 px-5 font-serif font-bold"
                 >
                   {isSubmitting ? 'Saving...' : 'Save Changes'}
                 </button>
@@ -975,20 +1102,24 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
 
       {/* QUICK ADD PHOTOS MODAL */}
       {addingPhotosToMemory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#FCFBF7] w-full max-w-lg rounded-xl border border-[#D6C4A8] shadow-2xl overflow-hidden flex flex-col">
-            <div className="px-6 py-4 bg-[#E8DDC9]/70 border-b border-[#D6C4A8] flex items-center justify-between">
-              <h2 className="font-serif text-lg font-bold text-[#493D35]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 animate-vintage-fade-up">
+          <div className="paper-sheet w-full max-w-lg rounded-xs border-2 border-[#493D35] shadow-[5px_6px_0px_rgba(73,61,53,0.25)] overflow-hidden flex flex-col">
+            <div className="px-4 sm:px-6 py-4 bg-[#E8DDC9] border-b-1.5 border-[#493D35] flex items-center justify-between">
+              <h2 className="font-serif text-base sm:text-lg font-bold text-[#493D35]">
                 Add Photo to &quot;{addingPhotosToMemory.title}&quot;
               </h2>
-              <button onClick={() => setAddingPhotosToMemory(null)} className="p-1 text-[#8B735E] hover:text-[#493D35]">
+              <button
+                onClick={() => setAddingPhotosToMemory(null)}
+                aria-label="Close Add Photo Modal"
+                className="p-1.5 text-[#493D35] hover:bg-[#493D35]/10 rounded-xs transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleAddPhotosSubmit} className="p-6 space-y-4 text-xs">
               <div>
-                <label className="block font-semibold uppercase tracking-wider text-[#493D35] mb-1">
+                <label className="block font-serif font-bold uppercase tracking-wider text-[#493D35] mb-1">
                   Photograph Source (URL or File)
                 </label>
                 <input
@@ -996,11 +1127,11 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                   value={quickPhotoUrl}
                   onChange={(e) => setQuickPhotoUrl(e.target.value)}
                   placeholder="Paste direct image link..."
-                  className="w-full px-3 py-2 bg-white border border-[#D6C4A8] rounded-lg text-xs text-[#493D35] mb-2"
+                  className="w-full px-3 py-2 bg-transparent border-1.5 border-[#493D35] rounded-xs text-xs text-[#493D35] mb-2"
                 />
 
-                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#D6C4A8] hover:bg-[#F5F0E6] rounded-lg text-xs font-medium text-[#493D35] cursor-pointer">
-                  <Upload className="w-3.5 h-3.5 text-[#8B735E]" />
+                <label className="ink-button-subtle inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif font-bold cursor-pointer">
+                  <Upload className="w-3.5 h-3.5 text-[#493D35]" />
                   <span>Choose local file</span>
                   <input
                     type="file"
@@ -1012,13 +1143,13 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
               </div>
 
               {quickPhotoUrl && (
-                <div className="aspect-[16/10] max-h-48 rounded overflow-hidden border border-[#D6C4A8]">
+                <div className="aspect-[16/10] max-h-48 rounded-xs overflow-hidden border-1.5 border-[#493D35] shadow-[2px_2px_0px_rgba(73,61,53,0.15)]">
                   <img src={quickPhotoUrl} alt="Preview" className="w-full h-full object-cover" />
                 </div>
               )}
 
               <div>
-                <label className="block font-semibold uppercase tracking-wider text-[#493D35] mb-1">
+                <label className="block font-serif font-bold uppercase tracking-wider text-[#493D35] mb-1">
                   Caption / Memory Notes
                 </label>
                 <input
@@ -1026,22 +1157,22 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                   value={quickPhotoCaption}
                   onChange={(e) => setQuickPhotoCaption(e.target.value)}
                   placeholder="What was happening here? Who was in the frame?"
-                  className="w-full px-3 py-2 bg-white border border-[#D6C4A8] rounded-lg text-xs text-[#493D35]"
+                  className="w-full px-3 py-2 bg-transparent border-1.5 border-[#493D35] rounded-xs text-xs text-[#493D35]"
                 />
               </div>
 
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#D6C4A8]">
+              <div className="pt-4 flex items-center justify-end gap-3 border-t-1.5 border-[#493D35]">
                 <button
                   type="button"
                   onClick={() => setAddingPhotosToMemory(null)}
-                  className="px-4 py-2 text-xs font-medium text-[#8B735E]"
+                  className="ink-button-subtle text-xs py-2 px-4"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting || !quickPhotoUrl.trim()}
-                  className="px-4 py-2 bg-[#493D35] hover:bg-[#382E28] text-[#F5F0E6] rounded-lg font-semibold disabled:opacity-50"
+                  className="ink-button text-xs py-2 px-5 font-serif font-bold disabled:opacity-50"
                 >
                   {isSubmitting ? 'Adding...' : 'Add Photograph'}
                 </button>
@@ -1068,6 +1199,28 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
           onSuccess={handlePasswordModalSuccess}
         />
       )}
+
+      {/* CENTRALIZED CLEANUP DIALOG */}
+      <CleanupDialog
+        isOpen={isCleanupOpen}
+        onClose={() => setIsCleanupOpen(false)}
+        memories={memories}
+        onConfirm={async (payload) => {
+          const res = await bulkDeleteMemories(payload);
+          await refreshStorage();
+          alert(res.message);
+        }}
+      />
+
+      {/* CONTROLLED FRESH-START STORAGE RESET MODAL */}
+      <StorageResetModal
+        isOpen={isResetModalOpen}
+        onClose={() => setIsResetModalOpen(false)}
+        onResetComplete={async () => {
+          if (onRefresh) await onRefresh();
+          await refreshStorage(true);
+        }}
+      />
     </div>
   );
 };

@@ -16,8 +16,11 @@ import {
   Lock,
   Unlock,
   Shield,
-  Upload
+  Upload,
+  Sparkles,
+  Camera
 } from 'lucide-react';
+import { PhotoIllustrationCanvas, getCachedIllustration } from './PhotoIllustrationCanvas.tsx';
 
 interface PhotoLightboxProps {
   photo: Photograph;
@@ -26,6 +29,7 @@ interface PhotoLightboxProps {
   isCover: boolean;
   students: Student[];
   isUnlocked: boolean;
+  illustratedUrl?: string;
   onRequestUnlock: (actionDescription: string) => void;
   onClose: () => void;
   onNavigate: (photo: Photograph) => void;
@@ -40,12 +44,14 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
   isCover,
   students,
   isUnlocked,
+  illustratedUrl,
   onRequestUnlock,
   onClose,
   onNavigate,
   onUpdateDetails,
   onDeletePhoto,
 }) => {
+  const [viewMode, setViewMode] = useState<'original' | 'artwork'>('original');
   const [isEditing, setIsEditing] = useState(false);
   const [caption, setCaption] = useState(photo.caption);
   const [location, setLocation] = useState(photo.location || '');
@@ -169,12 +175,13 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#493D35]/75 backdrop-blur-sm p-3 sm:p-6 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-2 sm:p-6 animate-vintage-scale-fade"
     >
       {/* Close button */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 z-50 p-2 text-[#E8DDC9] hover:text-white bg-black/40 hover:bg-black/60 rounded-full transition-colors"
+        aria-label="Close Lightbox Viewer (Esc)"
+        className="absolute top-3 right-3 sm:top-4 sm:right-4 z-50 p-2 text-[#E8DDC9] hover:text-white bg-[#493D35] border border-[#FAF6EE]/40 hover:bg-[#382E28] rounded-xs transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer shadow-[2px_2px_0px_rgba(0,0,0,0.5)]"
         title="Close Lightbox (Esc)"
       >
         <X className="w-6 h-6" />
@@ -184,7 +191,8 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
       {hasPrev && (
         <button
           onClick={handlePrev}
-          className="absolute left-4 top-1/2 -translate-y-1/2 z-50 p-2 text-[#E8DDC9] hover:text-white bg-black/40 hover:bg-black/60 rounded-full transition-colors"
+          aria-label="Previous Photograph"
+          className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-50 p-2 text-[#E8DDC9] hover:text-white bg-[#493D35] border border-[#FAF6EE]/40 hover:bg-[#382E28] rounded-xs transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer shadow-[2px_2px_0px_rgba(0,0,0,0.5)]"
           title="Previous Photo (←)"
         >
           <ChevronLeft className="w-6 h-6" />
@@ -193,7 +201,8 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
       {hasNext && (
         <button
           onClick={handleNext}
-          className="absolute right-4 top-1/2 -translate-y-1/2 z-50 p-2 text-[#E8DDC9] hover:text-white bg-black/40 hover:bg-black/60 rounded-full transition-colors"
+          aria-label="Next Photograph"
+          className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-50 p-2 text-[#E8DDC9] hover:text-white bg-[#493D35] border border-[#FAF6EE]/40 hover:bg-[#382E28] rounded-xs transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer shadow-[2px_2px_0px_rgba(0,0,0,0.5)]"
           title="Next Photo (→)"
         >
           <ChevronRight className="w-6 h-6" />
@@ -203,31 +212,77 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
       {/* Main Lightbox Frame */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-6xl max-h-[92vh] bg-[#FCFBF7] rounded-xl border border-[#D6C4A8] shadow-2xl flex flex-col lg:flex-row overflow-hidden"
+        className="paper-sheet relative w-full max-w-6xl max-h-[92vh] rounded-xs border-2 border-[#493D35] shadow-[5px_6px_0px_rgba(73,61,53,0.35)] flex flex-col lg:flex-row overflow-hidden"
       >
-        {/* Photo Viewport Area */}
-        <div className="flex-1 bg-[#1A1614] flex items-center justify-center p-4 min-h-[300px] lg:min-h-[500px] relative overflow-hidden select-none">
-          <img
-            src={photo.url}
-            alt={photo.caption || 'Memory photograph'}
-            referrerPolicy="no-referrer"
-            className="max-h-[82vh] max-w-full object-contain drop-shadow-2xl rounded"
-          />
+          {/* Photo Viewport Area: Displays Original Photograph by default (PART C) */}
+          <div className="flex-1 bg-[#1A1614] flex items-center justify-center p-4 min-h-[300px] lg:min-h-[500px] relative overflow-hidden select-none">
+            {viewMode === 'original' ? (
+              <img
+                src={photo.url}
+                alt={photo.caption || 'Original uploaded memory photograph'}
+                referrerPolicy="no-referrer"
+                className="max-h-[82vh] max-w-full object-contain drop-shadow-2xl rounded-xs border-2 border-[#FAF6EE]/20"
+              />
+            ) : (illustratedUrl || photo.artworkUrl || getCachedIllustration(photo.id)) ? (
+              <img
+                src={illustratedUrl || photo.artworkUrl || getCachedIllustration(photo.id)}
+                alt={photo.caption || 'Reconstructed memory oil painting'}
+                referrerPolicy="no-referrer"
+                className="max-h-[82vh] max-w-full object-contain drop-shadow-2xl rounded-xs border-2 border-[#FAF6EE]/20"
+              />
+            ) : (
+              <div className="max-h-[82vh] w-full max-w-2xl aspect-[4/3] rounded-xs border-2 border-[#FAF6EE]/20 overflow-hidden shadow-2xl">
+                <PhotoIllustrationCanvas
+                  photo={photo}
+                  stage="finished"
+                  progress={1}
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            )}
+
+            {/* Paper-Crafted View Mode Toggle: Original Photo (Default) vs Oil Painting */}
+            <div className="absolute top-4 right-4 flex items-center gap-1 bg-[#E8DDC9] p-1 rounded-xs border border-[#493D35] shadow-[2px_2px_0px_rgba(73,61,53,0.3)] z-10">
+              <button
+                type="button"
+                onClick={() => setViewMode('original')}
+                className={`px-2.5 py-1 text-[11px] font-sans font-medium rounded-xs transition-colors flex items-center gap-1.5 cursor-pointer ${
+                  viewMode === 'original'
+                    ? 'bg-[#493D35] text-[#FAF6EE] shadow-xs'
+                    : 'text-[#493D35] hover:bg-[#FAF6EE]/50'
+                }`}
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>Original Photo</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('artwork')}
+                className={`px-2.5 py-1 text-[11px] font-sans font-medium rounded-xs transition-colors flex items-center gap-1.5 cursor-pointer ${
+                  viewMode === 'artwork'
+                    ? 'bg-[#493D35] text-[#FAF6EE] shadow-xs'
+                    : 'text-[#493D35] hover:bg-[#FAF6EE]/50'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-[#8B735E]" />
+                <span>Oil Painting</span>
+              </button>
+            </div>
 
           {isCover && (
-            <div className="absolute top-4 left-4 bg-[#E8DDC9]/90 text-[#493D35] px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+            <div className="absolute top-4 left-4 bg-[#E8DDC9] border-1.5 border-[#493D35] text-[#493D35] px-2.5 py-1 rounded-xs text-xs font-serif font-bold flex items-center gap-1.5 shadow-[2px_2px_0px_rgba(73,61,53,0.2)]">
               <Star className="w-3.5 h-3.5 fill-[#8B735E] text-[#8B735E]" />
               <span>Memory Cover Photograph</span>
             </div>
           )}
 
-          <div className="absolute bottom-4 left-4 bg-black/60 text-[#E8DDC9] px-2.5 py-1 rounded text-xs font-mono">
+          <div className="absolute bottom-4 left-4 bg-[#493D35] border border-[#FAF6EE]/30 text-[#E8DDC9] px-2.5 py-1 rounded-xs text-xs font-mono shadow-[2px_2px_0px_rgba(0,0,0,0.4)]">
             {currentIndex + 1} / {allPhotos.length}
           </div>
         </div>
 
         {/* Sidebar Metadata & Controls */}
-        <div className="w-full lg:w-96 p-6 flex flex-col justify-between overflow-y-auto bg-[#FCFBF7] border-t lg:border-t-0 lg:border-l border-[#D6C4A8] text-xs">
+        <div className="w-full lg:w-96 p-6 flex flex-col justify-between overflow-y-auto bg-[#FAF6EE] border-t-1.5 lg:border-t-0 lg:border-l-1.5 border-[#493D35] text-xs">
           <div>
             {/* Header info */}
             <div className="pb-4 border-b border-[#D6C4A8]/60 flex items-center justify-between">
@@ -243,7 +298,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
               <div className="flex items-center gap-2">
                 {isUnlocked ? (
                   <>
-                    <span className="inline-flex items-center gap-1 text-[10px] text-[#66715C] font-semibold bg-[#66715C]/15 px-2 py-0.5 rounded">
+                    <span className="inline-flex items-center gap-1 text-[10px] text-[#66715C] font-semibold bg-[#66715C]/15 px-2 py-0.5 rounded-xs border border-[#66715C]/40">
                       <Unlock className="w-2.5 h-2.5" />
                       <span>Unlocked</span>
                     </span>
@@ -251,16 +306,16 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
                     {!isEditing ? (
                       <button
                         onClick={handleStartEdit}
-                        className="p-1.5 text-[#8B735E] hover:text-[#493D35] hover:bg-[#E8DDC9]/50 rounded transition-colors cursor-pointer"
+                        className="ink-button-subtle p-1.5 cursor-pointer"
                         title="Edit Caption & Details"
                       >
-                        <Edit3 className="w-4 h-4" />
+                        <Edit3 className="w-3.5 h-3.5" />
                       </button>
                     ) : (
                       <button
                         onClick={handleSaveEdit}
                         disabled={isSaving}
-                        className="px-2.5 py-1 bg-[#493D35] text-[#F5F0E6] rounded text-xs font-medium flex items-center gap-1 cursor-pointer"
+                        className="ink-button text-xs py-1 px-2.5 flex items-center gap-1 cursor-pointer"
                       >
                         <Check className="w-3.5 h-3.5" />
                         <span>Save</span>
@@ -270,7 +325,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
                 ) : (
                   <button
                     onClick={() => onRequestUnlock('edit this photograph')}
-                    className="inline-flex items-center gap-1 text-[10px] text-[#8B735E] hover:text-[#493D35] bg-[#E8DDC9]/60 hover:bg-[#E8DDC9] px-2 py-0.5 rounded transition-colors cursor-pointer"
+                    className="ink-button-subtle text-[11px] py-0.5 px-2 flex items-center gap-1 cursor-pointer font-serif font-bold"
                     title="Click to enter memory passcode"
                   >
                     <Lock className="w-2.5 h-2.5" />
@@ -284,7 +339,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
             <div className="mt-4 space-y-4">
               {/* Caption */}
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#8B735E] mb-1">
+                <label className="block text-[11px] font-serif font-bold uppercase tracking-wider text-[#493D35] mb-1">
                   Memory Story / Caption
                 </label>
                 {isEditing ? (
@@ -292,7 +347,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
                     value={caption}
                     onChange={(e) => setCaption(e.target.value)}
                     rows={3}
-                    className="w-full p-2 bg-white border border-[#D6C4A8] rounded-md text-xs text-[#493D35] focus:outline-none focus:ring-1 focus:ring-[#8B735E]"
+                    className="w-full p-2 bg-transparent border-1.5 border-[#493D35] rounded-xs text-xs text-[#493D35] focus:outline-none focus:ring-1 focus:ring-[#493D35]"
                   />
                 ) : (
                   <p className="font-handwritten text-base sm:text-lg text-[#493D35] leading-relaxed">
@@ -311,14 +366,14 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                       placeholder="e.g. October 14, 2024"
-                      className="flex-1 px-2 py-1 bg-white border border-[#D6C4A8] rounded text-xs text-[#493D35]"
+                      className="flex-1 px-2 py-1 bg-transparent border-1.5 border-[#493D35] rounded-xs text-xs text-[#493D35]"
                     />
                   ) : (
                     <span>{photo.date || 'Undated archive'}</span>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 text-xs text-[#8B735E]">
+                <div className="flex items-center gap-2 text-xs text-[#493D35]/80">
                   <MapPin className="w-3.5 h-3.5 shrink-0" />
                   {isEditing ? (
                     <input
@@ -326,7 +381,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
                       value={location}
                       onChange={(e) => setLocation(e.target.value)}
                       placeholder="e.g. Anatomy Dissection Hall"
-                      className="flex-1 px-2 py-1 bg-white border border-[#D6C4A8] rounded text-xs text-[#493D35]"
+                      className="flex-1 px-2 py-1 bg-transparent border-1.5 border-[#493D35] rounded-xs text-xs text-[#493D35]"
                     />
                   ) : (
                     <span>{photo.location || 'Campus / Clinical grounds'}</span>
@@ -335,16 +390,16 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
               </div>
 
               {/* Tagged Classmates (Authoritative 150 Directory Integration) */}
-              <div className="pt-3 border-t border-[#D6C4A8]/40">
+              <div className="pt-3 border-t border-[#493D35]/20">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-[#8B735E] flex items-center gap-1.5">
+                  <label className="text-[11px] font-serif font-bold uppercase tracking-wider text-[#493D35] flex items-center gap-1.5">
                     <Tag className="w-3.5 h-3.5" />
                     <span>Tagged Classmates ({taggedIds.length})</span>
                   </label>
                   {isUnlocked && (
                     <button
                       onClick={handleToggleTagClick}
-                      className="text-[11px] font-medium text-[#66715C] hover:underline flex items-center gap-1 cursor-pointer"
+                      className="ink-button-subtle text-[11px] py-0.5 px-2 flex items-center gap-1 cursor-pointer font-serif font-semibold"
                     >
                       <Plus className="w-3 h-3" />
                       <span>Tag Classmate</span>
@@ -354,15 +409,15 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
 
                 {/* Tag Search Popup */}
                 {isUnlocked && isTagging && (
-                  <div className="mb-3 p-2 bg-[#F5F0E6] rounded-lg border border-[#D6C4A8]">
+                  <div className="mb-3 p-2 bg-[#FAF6EE] rounded-xs border-1.5 border-[#493D35] shadow-[2px_2px_0px_rgba(73,61,53,0.15)]">
                     <input
                       type="text"
                       value={tagSearch}
                       onChange={(e) => setTagSearch(e.target.value)}
                       placeholder="Search 150 students by name or roll..."
-                      className="w-full px-2.5 py-1.5 bg-white border border-[#D6C4A8] rounded text-xs text-[#493D35] mb-2 focus:outline-none focus:ring-1 focus:ring-[#8B735E]"
+                      className="w-full px-2.5 py-1.5 bg-transparent border-1.5 border-[#493D35] rounded-xs text-xs text-[#493D35] mb-2 focus:outline-none focus:ring-1 focus:ring-[#493D35]"
                     />
-                    <div className="max-h-48 overflow-y-auto divide-y divide-[#D6C4A8]/30 bg-white rounded border border-[#D6C4A8]">
+                    <div className="max-h-48 overflow-y-auto divide-y divide-[#493D35]/20 bg-transparent rounded-xs border border-[#493D35]/40">
                       {filterStudentsForTag.length === 0 ? (
                         <div className="p-3 text-center text-[11px] text-[#8B735E]">
                           No classmate matches &quot;{tagSearch}&quot;
@@ -375,7 +430,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
                               key={s.id}
                               type="button"
                               onClick={() => toggleTag(s.id)}
-                              className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-[#F5F0E6] flex items-center justify-between"
+                              className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-[#E8DDC9]/40 flex items-center justify-between cursor-pointer"
                             >
                               <div className="flex items-center gap-2">
                                 <span className="font-mono text-[10px] text-[#8B735E] w-7">
@@ -403,7 +458,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
                   </div>
                 )}
 
-                {/* Render Tagged Classmates (Clean Unboxed metadata / quiet chips) */}
+                {/* Render Tagged Classmates (Paper-craft unboxed/outlined tokens) */}
                 <div className="flex flex-wrap gap-1.5">
                   {taggedIds.length === 0 ? (
                     <span className="text-[11px] text-[#8B735E]/70 italic">
@@ -415,7 +470,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
                       return (
                         <span
                           key={id}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#E8DDC9]/70 text-[#493D35] rounded text-[11px] font-medium border border-[#D6C4A8]/60"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-transparent text-[#493D35] rounded-xs text-[11px] font-medium border border-[#493D35]"
                         >
                           <span>{student ? student.name : id}</span>
                           {isUnlocked && (
@@ -434,30 +489,29 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
                 </div>
               </div>
 
-
             </div>
           </div>
 
           {/* Action Buttons Footer (Only rendered when editing is unlocked) */}
           {isUnlocked && (
-            <div className="pt-4 border-t border-[#D6C4A8]/60 flex items-center justify-between gap-2 flex-wrap">
+            <div className="pt-4 border-t-1.5 border-[#493D35]/30 flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
                 {!isCover ? (
                   <button
                     onClick={handleSetCover}
-                    className="px-3 py-1.5 bg-[#E8DDC9] hover:bg-[#D6C4A8] text-[#493D35] rounded text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                    className="ink-button-subtle text-xs py-1.5 px-3 flex items-center gap-1.5 cursor-pointer"
                   >
                     <Star className="w-3.5 h-3.5" />
                     <span>Make Cover</span>
                   </button>
                 ) : (
-                  <span className="text-[11px] text-[#66715C] font-semibold flex items-center gap-1">
+                  <span className="text-[11px] text-[#66715C] font-serif font-bold flex items-center gap-1">
                     <Check className="w-3.5 h-3.5" />
                     <span>Current Cover</span>
                   </span>
                 )}
 
-                <label className="px-3 py-1.5 bg-[#E8DDC9] hover:bg-[#D6C4A8] text-[#493D35] rounded text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer">
+                <label className="ink-button-subtle text-xs py-1.5 px-3 flex items-center gap-1.5 cursor-pointer">
                   <Upload className="w-3.5 h-3.5" />
                   <span>Replace Image</span>
                   <input
@@ -489,7 +543,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
               </div>
 
               {deleteError && (
-                <p className="text-[11px] text-red-600 bg-red-50 p-2 rounded border border-red-200">
+                <p className="text-[11px] text-red-700 bg-red-50 p-2 rounded-xs border border-red-300">
                   {deleteError}
                 </p>
               )}
@@ -497,7 +551,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
               <button
                 onClick={handleDeleteClick}
                 disabled={isDeletingPhoto}
-                className="px-3 py-1.5 text-red-700 hover:bg-red-50 rounded text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="ink-button-subtle text-red-700 hover:text-red-900 border-red-700 text-xs py-1.5 px-3 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{isDeletingPhoto ? 'Removing Photo...' : 'Remove Photo'}</span>

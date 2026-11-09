@@ -390,28 +390,43 @@ export async function listOciObjects(): Promise<{ objects: Array<{ name: string;
   }
 
   const ns = discoveredNamespace || OCI_NAMESPACE;
-  const path = `/n/${ns}/b/${OCI_BUCKET}/o`;
-  const res = await ociRequestExtended('GET', path);
+  const allObjects: Array<{ name: string; size: number }> = [];
+  let nextStart: string | null = null;
+  let pageCount = 0;
 
-  if (res.statusCode !== 200) {
-    const errText = res.body.toString('utf-8');
-    if (res.statusCode === 404 && errText.includes('BucketNotFound')) {
-      markOciBucketUnavailable('BucketNotFound');
-      console.warn(`[OCI Storage] Bucket '${OCI_BUCKET}' not found in namespace '${ns}'. Falling back to local calculation.`);
-      return { objects: [], totalSize: 0 };
+  do {
+    let path = `/n/${ns}/b/${OCI_BUCKET}/o?limit=1000`;
+    if (nextStart) {
+      path += `&start=${encodeURIComponent(nextStart)}`;
     }
-    console.error(`[OCI Storage] List Objects failed (${res.statusCode}). Path: ${path}. Response:`, errText);
-    throw new Error(`OCI List Objects failed (${res.statusCode}): ${errText}`);
-  }
 
-  isBucketAvailable = true;
-  const json = JSON.parse(res.body.toString('utf-8'));
-  const objects = (json.objects || []).map((o: any) => ({
-    name: o.name,
-    size: Number(o.size || 0),
-  }));
-  const totalSize = objects.reduce((sum: number, o: any) => sum + o.size, 0);
-  return { objects, totalSize };
+    const res = await ociRequestExtended('GET', path);
+
+    if (res.statusCode !== 200) {
+      const errText = res.body.toString('utf-8');
+      if (res.statusCode === 404 && errText.includes('BucketNotFound')) {
+        markOciBucketUnavailable('BucketNotFound');
+        console.warn(`[OCI Storage] Bucket '${OCI_BUCKET}' not found in namespace '${ns}'. Falling back to local calculation.`);
+        return { objects: [], totalSize: 0 };
+      }
+      console.error(`[OCI Storage] List Objects failed (${res.statusCode}). Path: ${path}. Response:`, errText);
+      throw new Error(`OCI List Objects failed (${res.statusCode}): ${errText}`);
+    }
+
+    isBucketAvailable = true;
+    const json = JSON.parse(res.body.toString('utf-8'));
+    const pageObjs = (json.objects || []).map((o: any) => ({
+      name: o.name,
+      size: Number(o.size || 0),
+    }));
+
+    allObjects.push(...pageObjs);
+    nextStart = json.nextStartWith || null;
+    pageCount++;
+  } while (nextStart && pageCount < 50);
+
+  const totalSize = allObjects.reduce((sum, o) => sum + o.size, 0);
+  return { objects: allObjects, totalSize };
 }
 
 /**

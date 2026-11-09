@@ -1,12 +1,13 @@
 import React from 'react';
 import type { StorageMetrics } from '../services/api.ts';
-import { Database, HardDrive, AlertTriangle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Database, HardDrive, AlertTriangle, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
 
 interface StorageUsageBarProps {
   metrics: StorageMetrics | null;
   error?: string | null;
   isLoading?: boolean;
   onRefresh?: () => void;
+  onOpenReset?: () => void;
   className?: string;
 }
 
@@ -24,6 +25,7 @@ export const StorageUsageBar: React.FC<StorageUsageBarProps> = ({
   error,
   isLoading = false,
   onRefresh,
+  onOpenReset,
   className = '',
 }) => {
   if (error) {
@@ -93,21 +95,21 @@ export const StorageUsageBar: React.FC<StorageUsageBarProps> = ({
 
   return (
     <div
-      className={`p-3.5 sm:p-4 bg-[#FCFBF7] border border-[#D6C4A8] rounded-xl shadow-xs transition-all ${className}`}
+      className={`p-3.5 sm:p-4 paper-card border-1.5 border-[#493D35] rounded-xs shadow-[2px_3px_0px_rgba(73,61,53,0.15)] transition-all ${className}`}
     >
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#D6C4A8]/60">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#493D35]/20">
         <div className="flex items-center gap-2">
-          <HardDrive className="w-4 h-4 text-[#8B735E] shrink-0" />
+          <HardDrive className="w-4 h-4 text-[#493D35] shrink-0" />
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-xs sm:text-sm font-serif font-bold text-[#493D35] tracking-tight">
                 Oracle Object Storage
               </h3>
-              <span className={`px-2 py-0.5 text-[10px] font-mono font-semibold rounded border ${badgeColorClass}`}>
+              <span className="px-1.5 py-0.5 text-[10px] font-mono font-semibold rounded-xs border border-[#493D35] text-[#493D35]">
                 {percentageUsed}% used
               </span>
             </div>
-            <p className="text-[10px] text-[#8B735E] mt-0.5 truncate max-w-xs sm:max-w-md">
+            <p className="text-[10px] text-[#493D35]/70 mt-0.5 truncate max-w-xs sm:max-w-md">
               {provider} · {objectCount} {objectCount === 1 ? 'object' : 'objects'}
             </p>
           </div>
@@ -122,10 +124,19 @@ export const StorageUsageBar: React.FC<StorageUsageBarProps> = ({
             <button
               onClick={onRefresh}
               disabled={isLoading}
-              className="p-1.5 text-[#8B735E] hover:text-[#493D35] hover:bg-[#E8DDC9]/50 rounded-lg transition-colors"
+              className="ink-button-subtle p-1 cursor-pointer"
               title="Refresh Storage Usage Metrics"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+          )}
+          {onOpenReset && (
+            <button
+              onClick={onOpenReset}
+              className="ink-button-subtle p-1 text-[#B84A39] hover:bg-[#B84A39]/10 cursor-pointer"
+              title="Controlled Fresh-Start Storage Reset"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-[#B84A39]" />
             </button>
           )}
         </div>
@@ -133,23 +144,23 @@ export const StorageUsageBar: React.FC<StorageUsageBarProps> = ({
 
       {/* Progress Bar */}
       <div className="mt-3 relative">
-        <div className="h-3.5 w-full bg-[#E8DDC9]/70 rounded-full overflow-hidden border border-[#D6C4A8]/80 p-0.5 flex items-center">
+        <div className="h-2.5 w-full bg-[#E8DDC9] rounded-xs overflow-hidden border border-[#493D35] p-0.5 flex items-center">
           <div
-            className={`h-full rounded-full transition-all duration-700 ease-out ${barColorClass}`}
+            className={`h-full rounded-xs transition-all duration-700 ease-out ${barColorClass}`}
             style={{ width: `${Math.max(1.5, Math.min(100, percentageUsed))}%` }}
           />
         </div>
       </div>
 
       {/* Text Details */}
-      <div className="mt-2 flex items-center justify-between text-[11px] font-mono text-[#8B735E]">
+      <div className="mt-2 flex items-center justify-between text-[11px] font-mono text-[#493D35]/80">
         <span>Used: {formatBytes(usedBytes)}</span>
         <span>Remaining: {formatBytes(remainingBytes)}</span>
       </div>
 
       {/* Warning State Banner */}
       {warningMessage && (
-        <div className="mt-2.5 p-2 bg-[#E8DDC9]/40 border border-[#D6C4A8] rounded-lg flex items-center gap-2 text-xs text-[#493D35]">
+        <div className="mt-2.5 p-2 bg-[#FAF6EE] border-1.5 border-[#493D35] rounded-xs flex items-center gap-2 text-xs text-[#493D35]">
           <AlertCircle className="w-4 h-4 text-[#B84A39] shrink-0" />
           <span className="leading-snug">{warningMessage}</span>
         </div>

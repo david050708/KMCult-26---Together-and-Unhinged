@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "id": "op-1794220832885-0416ea",
+    "type": "delete_memory",
+    "status": "completed",
+    "memoryId": "mem-1794220819657-6a597998",
+    "createdAt": "2026-11-09T10:40:32.885Z",
+    "updatedAt": "2026-11-09T10:40:32.888Z"
+  }
+]

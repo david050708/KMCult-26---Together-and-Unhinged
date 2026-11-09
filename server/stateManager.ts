@@ -34,6 +34,7 @@ export interface ServerMemory {
   description: string;
   date: string;
   category?: string;
+  reconstructionMode?: 'original' | 'oil_painting' | 'legacy';
   coverPhotoId?: string;
   coverPhotoUrl?: string;
   photos: Photograph[];
@@ -41,6 +42,7 @@ export interface ServerMemory {
   updatedAt: string;
   passwordSalt: string;
   passwordHash: string;
+  isPendingDeletion?: boolean;
 }
 
 const PATHS = {

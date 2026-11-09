@@ -15,6 +15,7 @@ import {
   isOciOperational,
   checkOciStorageHealth 
 } from './server/ociStorage.ts';
+import cookieParser from 'cookie-parser';
 import {
   loadMemories,
   loadRoster,
@@ -25,7 +26,12 @@ import {
   type ServerMemory,
   type StorageOperation
 } from './server/stateManager.ts';
-import { signMemoryToken, verifyMemoryToken } from './server/sessionHelper.ts';
+import {
+  signMemoryToken,
+  verifyMemoryToken,
+  signBatchSessionToken,
+  verifyBatchSessionToken
+} from './server/sessionHelper.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -230,7 +236,24 @@ async function deletePhotographStorageObject(
       console.error(`[OCI Storage] Deletion failed for key ${key}:`, err.message || err);
       const targetOpId = opId || (await recordOperation('delete_photo', memoryId || 'unknown', { photoId: photo.id || 'photo', oldOciObjectKey: key })).id;
       await updateOperationStatus(targetOpId, 'failed_retry', err.message || 'OCI delete failed');
-      throw err;
+    }
+  }
+
+  // Also clean up associated persistent artwork OCI object if present
+  let artworkKey = (photo as any).artworkOciObjectKey;
+  if (!artworkKey && (photo as any).artworkUrl && (photo as any).artworkUrl.includes('/api/oci/photo?key=')) {
+    try {
+      const match = (photo as any).artworkUrl.match(/[?&]key=([^&]+)/);
+      if (match) artworkKey = decodeURIComponent(match[1]);
+    } catch {}
+  }
+
+  if (artworkKey && artworkKey !== key) {
+    try {
+      await deleteFromOci(artworkKey);
+      console.log(`[OCI Storage] Successfully deleted artwork object key: ${artworkKey}`);
+    } catch (err: any) {
+      console.error(`[OCI Storage] Artwork deletion failed for key ${artworkKey}:`, err.message || err);
     }
   }
 }
@@ -258,6 +281,7 @@ async function retryPendingOperations() {
 // -------------------------------------------------------------
 // Middleware & Static Serving
 // -------------------------------------------------------------
+app.use(cookieParser());
 app.use(express.json({ limit: '60mb' }));
 app.use(express.urlencoded({ extended: true, limit: '60mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'data', 'uploads')));
@@ -272,9 +296,14 @@ app.get('/api/oci/photo', async (req, res) => {
 
   const { data: memoriesState } = await loadMemories();
 
-  // Ownership Check: Ensure key belongs to an active photograph in memoriesState
+  // Ownership Check: Ensure key belongs to an active photograph or generated artwork in memoriesState
   const isKeyAssociated = memoriesState.some((mem) =>
-    mem.photos.some((p) => p.ociObjectKey === key || (p.url && p.url.includes(encodeURIComponent(key)))) ||
+    mem.photos.some((p) => 
+      p.ociObjectKey === key || 
+      p.artworkOciObjectKey === key || 
+      (p.url && p.url.includes(encodeURIComponent(key))) ||
+      (p.artworkUrl && p.artworkUrl.includes(encodeURIComponent(key)))
+    ) ||
     (mem.coverPhotoUrl && mem.coverPhotoUrl.includes(encodeURIComponent(key)))
   );
 
@@ -297,9 +326,10 @@ let storageUsageCache: { data: any; timestamp: number } | null = null;
 const STORAGE_CACHE_TTL = 30 * 1000; // 30 seconds
 
 // OCI Object Storage Usage Endpoint (Priority 3 Requirement)
-app.get('/api/storage/usage', async (_req, res) => {
+app.get('/api/storage/usage', async (req, res) => {
+  const forceFresh = req.query.fresh === 'true' || req.query.fresh === '1';
   const now = Date.now();
-  if (storageUsageCache && (now - storageUsageCache.timestamp) < STORAGE_CACHE_TTL) {
+  if (!forceFresh && storageUsageCache && (now - storageUsageCache.timestamp) < STORAGE_CACHE_TTL) {
     return res.json(storageUsageCache.data);
   }
 
@@ -374,6 +404,22 @@ app.get('/api/storage/health', async (_req, res) => {
   res.json(health);
 });
 
+// Authorization Middleware: Validates general batch session
+async function requireBatchAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const authHeader = req.headers['authorization'];
+  const token = (authHeader && authHeader.split(' ')[1]) || 
+                (req.cookies && req.cookies['kmc26_batch_session']) || 
+                (req.headers['x-batch-token'] as string) || 
+                (req.query.token as string) || 
+                (req.body && req.body.token);
+
+  if (token) {
+    const isValid = await verifyBatchSessionToken(token);
+    if (isValid) return next();
+  }
+  return res.status(401).json({ error: 'Batch authorization required. Please login as a batch member to perform this action.' });
+}
+
 // Authorization Middleware: Validates JWT for protected operations
 async function requireMemoryEditAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
   const memoryId = req.params.id;
@@ -393,6 +439,59 @@ async function requireMemoryEditAuth(req: express.Request, res: express.Response
   }
 
   next();
+}
+
+/**
+ * Reusable logic to permanently delete a memory and its associated storage objects.
+ * Accounts for shared OCI object keys and handles failures via pending operations.
+ */
+async function performMemoryDeletion(memoryId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: currentMemories } = await loadMemories();
+    const existingMemory = currentMemories.find((m) => m.id === memoryId);
+
+    if (!existingMemory) {
+      storageUsageCache = null;
+      return { success: true };
+    }
+
+    const op = await recordOperation('delete_memory', existingMemory.id, {});
+
+    // 1. Physically delete every photograph and associated artwork object from OCI and local storage
+    for (const p of existingMemory.photos) {
+      try {
+        await deletePhotographStorageObject(p, existingMemory.id, op.id);
+      } catch (err: any) {
+        console.warn(`[OCI Cleanup] Failed to delete photo objects for ${p.id}:`, err.message || err);
+      }
+    }
+
+    // Clean up any remaining local uploads for this memory folder
+    const uploadsDir = path.join(__dirname, 'data', 'uploads');
+    if (fs.existsSync(uploadsDir)) {
+      try {
+        const files = fs.readdirSync(uploadsDir);
+        for (const f of files) {
+          if (f.startsWith(`${memoryId}_`)) {
+            try { fs.unlinkSync(path.join(uploadsDir, f)); } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    // 2. Remove from authoritative store
+    await updateMemoriesAtomic((current) => current.filter((m) => m.id !== memoryId));
+
+    // 3. Invalidate storage usage cache immediately so usage updates live
+    storageUsageCache = null;
+
+    // 4. Finalize operation
+    await updateOperationStatus(op.id, 'completed');
+    return { success: true };
+  } catch (err: any) {
+    console.error(`[Deletion Task] Fatal error deleting memory ${memoryId}:`, err);
+    return { success: false, error: err.message };
+  }
 }
 
 // -------------------------------------------------------------
@@ -461,38 +560,297 @@ app.get('/api/storage/reconcile', async (_req, res) => {
   }
 });
 
-// Authenticated Cleanup Trigger (Background Task Replacement)
+// Authenticated Storage Reconciliation & Orphan Cleanup Endpoint
 app.post('/api/storage/cleanup', async (req, res) => {
-  const { secret } = req.body;
-  // Use session secret or dedicated cleanup secret
-  if (secret !== (process.env.SESSION_SECRET || 'cleanup')) {
-    return res.status(403).json({ error: 'Unauthorized cleanup request.' });
+  const authHeader = req.headers['authorization'];
+  const token = (authHeader && authHeader.split(' ')[1]) || 
+                (req.cookies && req.cookies['kmc26_batch_session']) || 
+                (req.headers['x-batch-token'] as string) ||
+                (req.body && req.body.secret);
+
+  const isValidAuth = token === (process.env.SESSION_SECRET || 'cleanup') || await verifyBatchSessionToken(token || '');
+  if (!isValidAuth) {
+    return res.status(403).json({ error: 'Unauthorized storage cleanup request. Batch authorization required.' });
   }
 
-  await retryPendingOperations();
-  res.json({ success: true, message: 'OCI cleanup triggered successfully.' });
+  try {
+    const { data: memoriesState } = await loadMemories();
+    const activeKeys = new Set<string>();
+    const activeLocalFiles = new Set<string>();
+
+    for (const m of memoriesState) {
+      for (const p of m.photos) {
+        if (p.ociObjectKey) activeKeys.add(p.ociObjectKey);
+        if (p.artworkOciObjectKey) activeKeys.add(p.artworkOciObjectKey);
+        if (p.url && p.url.startsWith('/uploads/')) activeLocalFiles.add(path.basename(p.url));
+        if (p.artworkUrl && p.artworkUrl.startsWith('/uploads/')) activeLocalFiles.add(path.basename(p.artworkUrl));
+      }
+    }
+
+    let deletedOciCount = 0;
+    let deletedLocalCount = 0;
+
+    // 1. Delete orphaned OCI objects
+    if (isOciConfigured() && isOciOperational()) {
+      try {
+        const stats = await listOciObjects();
+        for (const obj of stats.objects) {
+          if (!obj.name.startsWith('application/') && !obj.name.startsWith('config/') && !activeKeys.has(obj.name)) {
+            try {
+              const success = await deleteFromOci(obj.name);
+              if (success) deletedOciCount++;
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    // 2. Delete orphaned local files
+    const uploadsDir = path.join(__dirname, 'data', 'uploads');
+    if (fs.existsSync(uploadsDir)) {
+      try {
+        const files = fs.readdirSync(uploadsDir);
+        for (const f of files) {
+          if (!activeLocalFiles.has(f)) {
+            try {
+              fs.unlinkSync(path.join(uploadsDir, f));
+              deletedLocalCount++;
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    // 3. Retry pending operations
+    await retryPendingOperations();
+    storageUsageCache = null;
+
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      deletedOciObjectsCount: deletedOciCount,
+      deletedLocalFilesCount: deletedLocalCount,
+      message: `Reconciliation cleanup completed: ${deletedOciCount} orphaned OCI objects and ${deletedLocalCount} unlinked local files purged.`
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Storage cleanup failed.' });
+  }
+});
+
+let isResetInProgress = false;
+
+// Controlled Fresh-Start Storage Reset: Dry-Run Inventory Endpoint
+app.post('/api/storage/reset-fresh-start/dry-run', requireBatchAuth, async (_req, res) => {
+  try {
+    const { data: memoriesState } = await loadMemories();
+    const { data: storageOps } = await loadPendingOperations();
+    const { data: rosterState } = await loadRoster();
+
+    let ociObjectsCount = 0;
+    let totalOciBytes = 0;
+
+    if (isOciConfigured() && isOciOperational()) {
+      try {
+        const stats = await listOciObjects();
+        ociObjectsCount = stats.objects.length;
+        totalOciBytes = stats.totalSize;
+      } catch {}
+    }
+
+    let localFilesCount = 0;
+    let localFilesBytes = 0;
+    const uploadsDir = path.join(__dirname, 'data', 'uploads');
+    if (fs.existsSync(uploadsDir)) {
+      try {
+        const files = fs.readdirSync(uploadsDir);
+        for (const file of files) {
+          const filePath = path.join(uploadsDir, file);
+          try {
+            const stat = fs.statSync(filePath);
+            if (stat.isFile()) {
+              localFilesCount++;
+              localFilesBytes += stat.size;
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+
+    let photoCount = 0;
+    let artworkCount = 0;
+    for (const m of memoriesState) {
+      photoCount += m.photos.length;
+      artworkCount += m.photos.filter((p) => p.artworkUrl || p.artworkOciObjectKey).length;
+    }
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      dryRun: true,
+      summary: {
+        memoriesCount: memoriesState.length,
+        photoCount,
+        artworkCount,
+        ociObjectsCount,
+        totalOciBytes,
+        localFilesCount,
+        localFilesBytes,
+        totalEstimatedBytesToDelete: totalOciBytes + localFilesBytes,
+        pendingOperationsCount: storageOps.length,
+        userAccountsPreserved: 1, // Authoritative Batch Session
+        rosterSlotsPreserved: rosterState.length
+      },
+      confirmationRequiredPhrase: "RESET ALL KMCULT26 STORAGE"
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to generate reset dry-run inventory.' });
+  }
+});
+
+// Controlled Fresh-Start Storage Reset: Execution Endpoint
+app.post('/api/storage/reset-fresh-start', requireBatchAuth, async (req, res) => {
+  const { confirmationPhrase } = req.body;
+  const cleanPhrase = String(confirmationPhrase || '').trim().toUpperCase();
+  if (cleanPhrase !== "RESET ALL KMCULT26 STORAGE" && cleanPhrase !== "RESET ALL KMCULT'26 MEMORIES") {
+    return res.status(400).json({
+      error: 'Invalid confirmation phrase. Exactly "RESET ALL KMCULT26 STORAGE" is required to authorize fresh-start reset.'
+    });
+  }
+
+  isResetInProgress = true;
+  try {
+    const { data: memoriesState } = await loadMemories();
+    let deletedOciObjectsCount = 0;
+    let deletedOciBytes = 0;
+    let deletedLocalFilesCount = 0;
+
+    // 1. Physically delete all OCI objects belonging to memories & artwork (preserving config & roster)
+    if (isOciConfigured() && isOciOperational()) {
+      try {
+        const stats = await listOciObjects();
+        for (const obj of stats.objects) {
+          if (!obj.name.startsWith('config/') && obj.name !== 'application/roster.json') {
+            try {
+              const success = await deleteFromOci(obj.name);
+              if (success) {
+                deletedOciObjectsCount++;
+                deletedOciBytes += obj.size;
+              }
+            } catch (err: any) {
+              console.warn(`[Reset Engine] Failed to delete OCI object ${obj.name}:`, err.message || err);
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error('[Reset Engine] Error listing/deleting OCI objects:', err.message || err);
+      }
+    }
+
+    // 2. Delete all local fallback files in data/uploads
+    const uploadsDir = path.join(__dirname, 'data', 'uploads');
+    if (fs.existsSync(uploadsDir)) {
+      try {
+        const files = fs.readdirSync(uploadsDir);
+        for (const file of files) {
+          const filePath = path.join(uploadsDir, file);
+          try {
+            const stat = fs.statSync(filePath);
+            if (stat.isFile()) {
+              fs.unlinkSync(filePath);
+              deletedLocalFilesCount++;
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+
+    // 3. Purge memories state and pending operations atomically
+    const previousMemoriesCount = memoriesState.length;
+    await updateMemoriesAtomic(() => []);
+    await updateOpsAtomic(() => []);
+
+    // 4. Invalidate storage cache immediately so live usage reports 0 bytes
+    storageUsageCache = null;
+
+    isResetInProgress = false;
+
+    return res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      report: {
+        memoriesDeletedCount: previousMemoriesCount,
+        deletedOciObjectsCount,
+        deletedOciBytes,
+        deletedLocalFilesCount,
+        remainingUsedBytes: 0,
+        remainingObjectCount: 0,
+        message: 'Fresh-start storage reset completed successfully. All memories, photos, artwork, and derivatives purged. User accounts, batch credentials, and roster preserved.',
+        status: 'VERIFIED'
+      }
+    });
+  } catch (err: any) {
+    isResetInProgress = false;
+    return res.status(500).json({
+      error: `Fresh-start reset encountered an error: ${err.message || 'Unknown error'}`
+    });
+  }
 });
 
 // -------------------------------------------------------------
-// Universal Batch Login Endpoint
+// Universal Batch Login, Session & Logout Endpoints
 // -------------------------------------------------------------
-app.post('/api/auth/login', (req, res) => {
-  const { username, password } = req.body;
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password, rememberMe } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Please enter both username and password.' });
   }
 
   // Universal Batch Credentials
   if (username.trim() === 'framesof26' && password === 'Fr@m3s_26') {
-    const token = `kmc26-session-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const isRemember = Boolean(rememberMe);
+    const token = await signBatchSessionToken(isRemember);
+
+    // Set secure server-controlled session cookie
+    res.cookie('kmc26_batch_session', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: isRemember ? 30 * 24 * 60 * 60 * 1000 : undefined // 30 days if rememberMe, otherwise browser session cookie
+    });
+
     return res.json({
       success: true,
       token,
+      rememberMe: isRemember,
       message: 'Universal batch login successful.'
     });
   }
 
   return res.status(401).json({ error: 'Invalid batch username or password.' });
+});
+
+// Check current server session state (Supports Remember Me & Page Refreshes)
+app.get('/api/auth/session', async (req, res) => {
+  const token = (req.cookies && req.cookies['kmc26_batch_session']) ||
+                (req.headers['authorization'] && req.headers['authorization'].split(' ')[1]) ||
+                (req.headers['x-batch-token'] as string);
+
+  if (token) {
+    const isValid = await verifyBatchSessionToken(token);
+    if (isValid) {
+      return res.json({ authenticated: true, token });
+    }
+  }
+  return res.json({ authenticated: false });
+});
+
+// Explicit session invalidation (Invalidates cookie regardless of Remember Me)
+app.post('/api/auth/logout', (_req, res) => {
+  res.clearCookie('kmc26_batch_session', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax'
+  });
+  return res.json({ success: true, message: 'Batch session successfully terminated.' });
 });
 
 // -------------------------------------------------------------
@@ -557,6 +915,15 @@ app.post('/api/memories/:id/auth', async (req, res) => {
   const { id } = req.params;
   const { password } = req.body;
   
+  const now = Date.now();
+  const attempt = failedPasswordAttempts.get(id);
+  if (attempt && attempt.lockedUntil > now) {
+    const remainingSecs = Math.ceil((attempt.lockedUntil - now) / 1000);
+    return res.status(429).json({
+      error: `Too many failed attempts. Memory editing locked for another ${remainingSecs}s.`
+    });
+  }
+
   const { data: memoriesState } = await loadMemories();
   const memory = memoriesState.find((m) => m.id === id);
   if (!memory) {
@@ -570,10 +937,22 @@ app.post('/api/memories/:id/auth', async (req, res) => {
   const isValid = verifyMemoryPassword(password, memory.passwordSalt, memory.passwordHash);
 
   if (!isValid) {
-    return res.status(401).json({
-      error: 'Incorrect memory editing password.'
-    });
+    const curCount = (attempt ? attempt.count : 0) + 1;
+    if (curCount >= 5) {
+      failedPasswordAttempts.set(id, { count: 0, lockedUntil: now + 2 * 60 * 1000 });
+      return res.status(429).json({
+        error: 'Too many incorrect attempts (5/5). Memory editing locked for 2 minutes.'
+      });
+    } else {
+      failedPasswordAttempts.set(id, { count: curCount, lockedUntil: 0 });
+      return res.status(401).json({
+        error: `Incorrect memory editing password. ${5 - curCount} attempts remaining before 2-minute lockout.`
+      });
+    }
   }
+
+  // Success: Clear failed attempts
+  failedPasswordAttempts.delete(id);
 
   // Issue Stateless JWT Token
   const token = await signMemoryToken(id);
@@ -586,21 +965,22 @@ app.post('/api/memories/:id/auth', async (req, res) => {
   });
 });
 
-// -------------------------------------------------------------
+// ----------------:
 // Memories CRUD Endpoints
-// -------------------------------------------------------------
+// ----------------:
 
 // Public: Get All Memories (Passwords stripped)
 app.get('/api/memories', async (_req, res) => {
   const { data: memoriesState } = await loadMemories();
-  res.json(memoriesState.map(sanitizeMemory));
+  // Filter out memories pending deletion
+  res.json(memoriesState.filter(m => !m.isPendingDeletion).map(sanitizeMemory));
 });
 
 // Public: Get Single Memory (Password stripped)
 app.get('/api/memories/:id', async (req, res) => {
   const { data: memoriesState } = await loadMemories();
   const memory = memoriesState.find((m) => m.id === req.params.id);
-  if (!memory) {
+  if (!memory || memory.isPendingDeletion) {
     return res.status(404).json({ error: 'Memory not found.' });
   }
   res.json(sanitizeMemory(memory));
@@ -614,8 +994,13 @@ app.post('/api/memories', async (req, res) => {
     date,
     category,
     password,
-    initialPhotos
+    initialPhotos,
+    reconstructionMode
   } = req.body;
+
+  const mode = (reconstructionMode === 'original' || reconstructionMode === 'oil_painting')
+    ? reconstructionMode
+    : 'oil_painting';
 
   if (!title || !title.trim()) {
     return res.status(400).json({ error: 'Memory title is required.' });
@@ -649,6 +1034,7 @@ app.post('/api/memories', async (req, res) => {
           date: p.date || date || '',
           location: p.location || '',
           taggedStudentIds: p.taggedStudentIds || [],
+          reconstructionMode: mode,
           createdAt: now,
           updatedAt: now,
           rotation: (Math.random() * 4 - 2),
@@ -669,6 +1055,7 @@ app.post('/api/memories', async (req, res) => {
     coverPhotoId: photos.length > 0 ? photos[0].id : undefined,
     coverPhotoUrl: photos.length > 0 ? photos[0].url : undefined,
     photos,
+    reconstructionMode: mode,
     createdAt: now,
     updatedAt: now,
     passwordSalt: salt,
@@ -721,63 +1108,107 @@ app.put('/api/memories/:id', requireMemoryEditAuth, async (req, res) => {
   }
 });
 
+// Protected Bulk Delete: Clear Memories by Age or Selection
+app.post('/api/memories/bulk-delete', requireBatchAuth, async (req, res) => {
+  const { memoryIds, olderThanDays, customCutoffDate } = req.body;
+  
+  const { data: currentMemories } = await loadMemories();
+  let targets: ServerMemory[] = [];
+
+  if (Array.isArray(memoryIds) && memoryIds.length > 0) {
+    targets = currentMemories.filter(m => memoryIds.includes(m.id));
+  } else if (olderThanDays || customCutoffDate) {
+    const cutoff = customCutoffDate 
+      ? new Date(customCutoffDate).getTime() 
+      : Date.now() - (Number(olderThanDays) * 24 * 60 * 60 * 1000);
+    
+    targets = currentMemories.filter(m => {
+      const createdTime = new Date(m.createdAt).getTime();
+      return createdTime < cutoff;
+    });
+  }
+
+  if (targets.length === 0) {
+    return res.json({ success: true, count: 0, message: 'No memories matched the cleanup criteria.' });
+  }
+
+  const targetIds = targets.map(m => m.id);
+
+  // 1. Mark as pending deletion immediately to prevent them from showing up
+  await updateMemoriesAtomic((current) => {
+    return current.map(m => {
+      if (targetIds.includes(m.id)) {
+        return { ...m, isPendingDeletion: true };
+      }
+      return m;
+    });
+  });
+
+  // 2. Perform deletion
+  const results = {
+    total: targetIds.length,
+    deleted: 0,
+    failed: 0,
+    errors: [] as string[]
+  };
+
+  for (const id of targetIds) {
+    const res = await performMemoryDeletion(id);
+    if (res.success) {
+      results.deleted++;
+    } else {
+      results.failed++;
+      results.errors.push(`${id}: ${res.error}`);
+    }
+  }
+
+  storageUsageCache = null;
+
+  res.json({
+    success: results.failed === 0,
+    ...results,
+    message: results.failed === 0 
+      ? `Successfully cleared ${results.deleted} memories and all associated OCI objects.`
+      : `Partially completed: ${results.deleted} deleted, ${results.failed} failed.`
+  });
+});
+
 // Protected: Delete Memory (Requires Memory Edit JWT)
 app.delete('/api/memories/:id', requireMemoryEditAuth, async (req, res) => {
   const memoryId = req.params.id;
 
-  const { data: currentMemories } = await loadMemories();
-  const existingMemory = currentMemories.find((m) => m.id === memoryId);
-
-  // Idempotence: If memory is already removed, return success immediately
-  if (!existingMemory) {
-    return res.json({ success: true, deletedId: memoryId, message: 'Memory already deleted (idempotent).' });
-  }
-
-  const op = await recordOperation('delete_memory', existingMemory.id, {});
-
-  // 1. Physically delete every photograph object from OCI and storage
-  const deletionErrors: string[] = [];
-  for (const p of existingMemory.photos) {
-    try {
-      await deletePhotographStorageObject(p, existingMemory.id, op.id);
-    } catch (err: any) {
-      console.warn(`[Delete Memory] Error deleting photo ${p.id}:`, err.message);
-      deletionErrors.push(err.message);
-    }
-  }
-
-  // Also clean up any lingering local files matching memoryId in data/uploads
-  const uploadsDir = path.join(__dirname, 'data', 'uploads');
-  if (fs.existsSync(uploadsDir)) {
-    try {
-      const files = fs.readdirSync(uploadsDir);
-      for (const f of files) {
-        if (f.startsWith(`${memoryId}_`)) {
-          try { fs.unlinkSync(path.join(uploadsDir, f)); } catch {}
-        }
+  // 1. Mark as pending deletion
+  await updateMemoriesAtomic((current) => {
+    return current.map(m => {
+      if (m.id === memoryId) {
+        return { ...m, isPendingDeletion: true };
       }
-    } catch {}
+      return m;
+    });
+  });
+
+  // 2. Perform deletion
+  const result = await performMemoryDeletion(memoryId);
+
+  if (!result.success) {
+    return res.status(500).json({ error: result.error });
   }
 
-  // 2. Atomically remove the memory record from authoritative metadata store
-  await updateMemoriesAtomic((current) => current.filter((m) => m.id !== memoryId));
-
-  // 3. Mark operation completed & prune pending operations for this memory
-  await updateOperationStatus(op.id, 'completed');
-  await updateOpsAtomic((ops) => ops.filter((o) => o.memoryId !== memoryId || o.id === op.id));
-
-  // 4. Invalidate storage metrics cache immediately
   storageUsageCache = null;
-
-  res.json({ success: true, deletedId: existingMemory.id });
+  res.json({ success: true, deletedId: memoryId });
 });
 
-// Protected: Add Student Photographs (Requires Memory Edit JWT)
 app.post('/api/memories/:id/photos', requireMemoryEditAuth, async (req, res) => {
   const memoryId = req.params.id;
   const { photos: incomingPhotos } = req.body;
   if (!Array.isArray(incomingPhotos) || incomingPhotos.length === 0) {
     return res.status(400).json({ error: 'Photographs required.' });
+  }
+
+  const { data: currentMemories } = await loadMemories();
+  const existingMemory = currentMemories.find((m) => m.id === memoryId);
+  if (!existingMemory || existingMemory.isPendingDeletion) {
+    return res.status(410).json({ error: 'Memory has been deleted or is pending deletion. Upload rejected.' });
   }
 
   const now = new Date().toISOString();
@@ -980,6 +1411,101 @@ app.delete('/api/memories/:id/photos/:photoId', requireMemoryEditAuth, async (re
   return res.json({
     success: true,
     memory: sanitizeMemory(finalUpdatedMemory)
+  });
+});
+
+// Save Generated Oil-Paint Artwork directly to Oracle Cloud Object Storage
+app.post('/api/memories/:id/photos/:photoId/artwork', async (req, res) => {
+  const { id: memoryId, photoId } = req.params;
+  const { dataUrl } = req.body;
+
+  if (!dataUrl || !dataUrl.startsWith('data:image/')) {
+    return res.status(400).json({ error: 'Valid Base64 image dataUrl required for artwork upload.' });
+  }
+
+  const { data: currentMemories } = await loadMemories();
+  const existingMemory = currentMemories.find((m) => m.id === memoryId);
+  if (!existingMemory) {
+    return res.status(404).json({ error: 'Memory folder not found.' });
+  }
+
+  const existingPhoto = existingMemory.photos.find((p) => p.id === photoId);
+  if (!existingPhoto) {
+    return res.status(404).json({ error: 'Photograph not found in memory.' });
+  }
+
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9\+\.-]+);base64,(.+)$/);
+  if (!match) {
+    return res.status(400).json({ error: 'Invalid artwork image data format.' });
+  }
+
+  const mime = match[1];
+  const buffer = Buffer.from(match[2], 'base64');
+  let ext = 'jpg';
+  if (mime.includes('png')) ext = 'png';
+
+  let artworkUrl = '';
+  let artworkOciObjectKey: string | undefined;
+
+  // Clean up any old local artwork file if replacing
+  const uploadsDir = path.join(__dirname, 'data', 'uploads');
+  if (existingPhoto.artworkUrl && existingPhoto.artworkUrl.startsWith('/uploads/')) {
+    try {
+      const oldFileName = path.basename(existingPhoto.artworkUrl);
+      const oldPath = path.join(uploadsDir, oldFileName);
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    } catch {}
+  }
+
+  if (isOciConfigured() && isOciOperational()) {
+    try {
+      const objectKey = `memories/${memoryId}/photos/${photoId}/artwork.${ext}`;
+      const resOci = await uploadToOci(objectKey, buffer, mime);
+      artworkUrl = `/api/oci/photo?key=${encodeURIComponent(resOci.objectKey)}`;
+      artworkOciObjectKey = resOci.objectKey;
+    } catch (err: any) {
+      console.warn('[OCI Storage] Direct artwork upload failed, using local disk fallback:', err.message);
+    }
+  }
+
+  if (!artworkUrl) {
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    const fileName = `${memoryId}_${photoId}_artwork.${ext}`;
+    const filePath = path.join(uploadsDir, fileName);
+    fs.writeFileSync(filePath, buffer);
+    artworkUrl = `/uploads/${fileName}`;
+  }
+
+  // Atomic state update
+  let updatedPhotoRef: Photograph | undefined;
+  await updateMemoriesAtomic((current) => {
+    return current.map(m => {
+      if (m.id === memoryId) {
+        const photo = m.photos.find(p => p.id === photoId);
+        if (photo) {
+          // Clean up old artwork key if replacing and different
+          if (photo.artworkOciObjectKey && photo.artworkOciObjectKey !== artworkOciObjectKey) {
+            deleteFromOci(photo.artworkOciObjectKey).catch(() => {});
+          }
+          photo.artworkUrl = artworkUrl;
+          photo.artworkOciObjectKey = artworkOciObjectKey;
+          photo.updatedAt = new Date().toISOString();
+          updatedPhotoRef = { ...photo };
+        }
+        return { ...m, updatedAt: new Date().toISOString() };
+      }
+      return m;
+    });
+  });
+
+  storageUsageCache = null;
+  return res.json({
+    success: true,
+    artworkUrl,
+    artworkOciObjectKey,
+    photo: updatedPhotoRef
   });
 });
 

@@ -7,10 +7,10 @@ interface IntroMessageModalProps {
 
 export const IntroMessageModal: React.FC<IntroMessageModalProps> = ({ onContinue }) => {
   return (
-    <div className="w-full max-w-xl p-4 sm:p-6 my-auto animate-in fade-in duration-700">
-      <div className="scrapbook-paper-card rounded-2xl p-8 sm:p-12 relative overflow-hidden">
+    <div className="w-full max-w-xl p-4 sm:p-6 my-auto animate-vintage-fade-up">
+      <div className="paper-sheet rounded-sm p-8 sm:p-12 relative overflow-hidden border-2 border-[#493D35] shadow-[4px_6px_0px_rgba(73,61,53,0.2)]">
         {/* Vintage Paper Tape Graphic */}
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-28 h-6 bg-[#E8DDC9]/90 border border-dashed border-[#8B735E]/40 rounded-sm transform -rotate-1 pointer-events-none" />
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-28 h-6 scrapbook-tape rounded-xs transform -rotate-1 pointer-events-none" />
 
         <div className="space-y-6 text-center font-handwritten text-[#493D35]">
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[#8B735E]">
@@ -30,7 +30,7 @@ export const IntroMessageModal: React.FC<IntroMessageModalProps> = ({ onContinue
           <div className="pt-6 flex justify-center">
             <button
               onClick={onContinue}
-              className="px-8 py-3 bg-[#493D35] text-[#F5F0E6] hover:bg-[#382E28] rounded-xl text-sm font-handwritten tracking-wider uppercase shadow-md transition-all flex items-center gap-2.5 cursor-pointer"
+              className="ink-button text-base sm:text-lg tracking-wider uppercase px-8 py-3.5"
             >
               <span>Open the Chronicle</span>
               <ArrowRight className="w-4 h-4" />
@@ -41,3 +41,4 @@ export const IntroMessageModal: React.FC<IntroMessageModalProps> = ({ onContinue
     </div>
   );
 };
+

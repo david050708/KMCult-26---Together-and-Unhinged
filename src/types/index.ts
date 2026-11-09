@@ -13,10 +13,13 @@ export interface Photograph {
   location?: string;
   taggedStudentIds: string[]; // Classmate directory tags
   ociObjectKey?: string; // Oracle Cloud Object Storage object key
+  artworkUrl?: string; // Persistent generated oil painting artwork URL in OCI
+  artworkOciObjectKey?: string; // OCI object key for persistent generated artwork
   createdAt: string;
   updatedAt: string;
   rotation?: number; // natural tilt angle in degrees, e.g. -2 to +2
   size?: 'normal' | 'large' | 'compact' | 'wide';
+  reconstructionMode?: 'original' | 'oil_painting' | 'legacy';
 }
 
 export interface Memory {
@@ -28,9 +31,11 @@ export interface Memory {
   coverPhotoId?: string;
   coverPhotoUrl?: string;
   photos: Photograph[];
+  reconstructionMode?: 'original' | 'oil_painting' | 'legacy';
   createdAt: string;
   updatedAt: string;
   isPasswordProtected?: boolean;
+  isPendingDeletion?: boolean;
 }
 
 export interface AuthSession {

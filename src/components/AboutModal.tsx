@@ -10,21 +10,22 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-[#FCFBF7] w-full max-w-2xl max-h-[85vh] rounded-xl border border-[#D6C4A8] shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 animate-vintage-fade-up">
+      <div className="paper-sheet w-full max-w-2xl max-h-[90vh] sm:max-h-[85vh] rounded-xs border-2 border-[#493D35] shadow-[5px_6px_0px_rgba(73,61,53,0.25)] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 bg-[#E8DDC9]/70 border-b border-[#D6C4A8] flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-4 bg-[#E8DDC9] border-b-1.5 border-[#493D35] flex items-center justify-between">
           <div>
-            <h2 className="font-serif text-lg font-bold text-[#493D35]">
+            <h2 className="font-serif text-base sm:text-lg font-bold text-[#493D35]">
               About KMCult&apos;26
             </h2>
-            <p className="text-xs text-[#8B735E]">
+            <p className="text-[11px] sm:text-xs text-[#8B735E]">
               Shared Digital Memory &amp; Swarm Reconstruction Platform
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-[#8B735E] hover:text-[#493D35] rounded-md transition-colors"
+            aria-label="Close About Modal"
+            className="p-1.5 text-[#493D35] hover:bg-[#493D35]/10 rounded-xs transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -72,11 +73,11 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        <div className="px-6 py-3 bg-[#E8DDC9]/50 border-t border-[#D6C4A8] flex items-center justify-between text-xs text-[#8B735E]">
+        <div className="px-6 py-3 bg-[#E8DDC9]/70 border-t border-[#493D35]/30 flex items-center justify-between text-xs text-[#8B735E]">
           <span>Kilpauk Medical College, Chennai · MBBS Class of 2026</span>
           <button
             onClick={onClose}
-            className="px-3 py-1 bg-white border border-[#D6C4A8] rounded text-[#493D35] hover:bg-[#F5F0E6]"
+            className="ink-button-subtle text-xs"
           >
             Close
           </button>

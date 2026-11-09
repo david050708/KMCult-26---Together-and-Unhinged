@@ -45,21 +45,50 @@ export function hasMemoryToken(memoryId: string): boolean {
 // Authentication Services
 // -------------------------------------------------------------
 
-export async function loginBatch(username: string, password: string): Promise<{ success: boolean; token?: string; error?: string }> {
+export async function loginBatch(username: string, password: string, rememberMe: boolean = false): Promise<{ success: boolean; token?: string; error?: string }> {
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password, rememberMe })
     });
     const data = await res.json();
     if (!res.ok) {
       return { success: false, error: data.error || 'Authentication failed' };
     }
+    if (data.token) {
+      localStorage.setItem('kmc26_token', data.token);
+    }
     return { success: true, token: data.token };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network connection error' };
   }
+}
+
+export async function checkBatchSession(): Promise<{ authenticated: boolean; token?: string }> {
+  try {
+    const token = localStorage.getItem('kmc26_token');
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch('/api/auth/session', { headers });
+    if (!res.ok) return { authenticated: false };
+    const data = await res.json();
+    if (data.authenticated && data.token) {
+      localStorage.setItem('kmc26_token', data.token);
+    }
+    return data;
+  } catch {
+    return { authenticated: false };
+  }
+}
+
+export async function logoutBatch(): Promise<void> {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+  } catch {}
+  localStorage.removeItem('kmc26_token');
+  sessionStorage.removeItem(MEMORY_TOKENS_KEY);
 }
 
 /**
@@ -151,6 +180,7 @@ export async function createMemory(payload: {
   date: string;
   category?: string;
   password: string; // Required editing password
+  reconstructionMode?: 'original' | 'oil_painting';
   initialPhotos?: { url: string; caption?: string; taggedStudentIds?: string[]; location?: string; date?: string }[];
 }): Promise<Memory> {
   const res = await fetch('/api/memories', {
@@ -203,6 +233,32 @@ export async function deleteMemory(id: string): Promise<{ success: boolean }> {
   clearMemoryToken(id);
   return data;
 }
+
+export async function bulkDeleteMemories(payload: {
+  memoryIds?: string[];
+  olderThanDays?: number;
+  customCutoffDate?: string;
+}): Promise<{
+  success: boolean;
+  total: number;
+  deleted: number;
+  failed: number;
+  message: string;
+}> {
+  const token = localStorage.getItem('kmc26_token');
+  const res = await fetch('/api/memories/bulk-delete', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-batch-token': token || ''
+    },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Bulk deletion failed');
+  return data;
+}
+
 
 export async function addPhotosToMemory(memoryId: string, photos: {
   url: string;
@@ -261,6 +317,25 @@ export async function deletePhotoFromMemory(memoryId: string, photoId: string): 
   return data;
 }
 
+export async function uploadArtworkToMemory(memoryId: string, photoId: string, dataUrl: string): Promise<{ success: boolean; artworkUrl: string; photo?: Photograph }> {
+  try {
+    const res = await fetch(`/api/memories/${memoryId}/photos/${photoId}/artwork`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.warn('Artwork upload failed:', data.error);
+      return { success: false, artworkUrl: '' };
+    }
+    return data;
+  } catch (err: any) {
+    console.warn('Artwork upload request error:', err.message);
+    return { success: false, artworkUrl: '' };
+  }
+}
+
 export interface StorageMetrics {
   usedBytes: number;
   allowanceBytes: number;
@@ -272,7 +347,7 @@ export interface StorageMetrics {
   isLimitReached: boolean;
 }
 
-export async function getStorageUsage(): Promise<StorageMetrics> {
+export async function getStorageUsage(forceFresh: boolean = false): Promise<StorageMetrics> {
   const fallbackMetrics: StorageMetrics = {
     usedBytes: 0,
     allowanceBytes: 10737418240,
@@ -288,7 +363,8 @@ export async function getStorageUsage(): Promise<StorageMetrics> {
   const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
 
   try {
-    const res = await fetch('/api/storage/usage', { signal: controller.signal });
+    const url = forceFresh ? '/api/storage/usage?fresh=true' : '/api/storage/usage';
+    const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
     
     const contentType = res.headers.get('content-type');
@@ -318,10 +394,32 @@ export interface StorageHealthReport {
   details: string;
 }
 
-export async function getStorageHealth(): Promise<StorageHealthReport> {
-  const res = await fetch('/api/storage/health');
+export async function getResetDryRun(): Promise<any> {
+  const token = localStorage.getItem('kmc26_token');
+  const res = await fetch('/api/storage/reset-fresh-start/dry-run', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-batch-token': token || ''
+    }
+  });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to retrieve storage health');
+  if (!res.ok) throw new Error(data.error || 'Failed to fetch reset dry-run inventory');
+  return data;
+}
+
+export async function executeFreshStartReset(confirmationPhrase: string): Promise<any> {
+  const token = localStorage.getItem('kmc26_token');
+  const res = await fetch('/api/storage/reset-fresh-start', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-batch-token': token || ''
+    },
+    body: JSON.stringify({ confirmationPhrase })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Fresh-start reset failed');
   return data;
 }
 

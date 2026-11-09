@@ -13,9 +13,12 @@ import {
   deleteMemory,
   addPhotosToMemory,
   updatePhotoDetails,
-  deletePhotoFromMemory
+  deletePhotoFromMemory,
+  checkBatchSession,
+  logoutBatch
 } from './services/api.ts';
 import { HandwrittenTitle, type HandwrittenTitleHandle } from './components/HandwrittenTitle.tsx';
+import { ScrollStorytelling } from './components/ScrollStorytelling.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { IntroMessageModal } from './components/IntroMessageModal.tsx';
 import { TopNav } from './components/TopNav.tsx';
@@ -25,14 +28,12 @@ import { StudentDirectoryModal } from './components/StudentDirectoryModal.tsx';
 import { AuthoritativeRosterModal } from './components/AuthoritativeRosterModal.tsx';
 import { AboutModal } from './components/AboutModal.tsx';
 import { AUTHORITATIVE_ROSTER } from './data/rosterData.ts';
-import { FastForward } from 'lucide-react';
 
 export default function App() {
   // Title Animation & Docking Lifecycle:
   // false = centered writing on scrapbook canvas
   // true = docked permanently into the upper header
   const [isTitleDocked, setIsTitleDocked] = useState<boolean>(() => {
-    // If user has already visited in this session and is logged in, start docked
     return Boolean(localStorage.getItem('kmc26_token'));
   });
 
@@ -47,9 +48,9 @@ export default function App() {
     };
   });
 
-  const [introStep, setIntroStep] = useState<'animating' | 'message' | 'login' | 'authenticated'>(() => {
+  const [introStep, setIntroStep] = useState<'tracing' | 'logo_transition' | 'scrolling_story' | 'showing_chronicle' | 'login' | 'authenticated'>(() => {
     const savedToken = localStorage.getItem('kmc26_token');
-    return savedToken ? 'authenticated' : 'animating';
+    return savedToken ? 'authenticated' : 'tracing';
   });
 
   // Central 150-Student Directory (Exclusively for tagging classmates)
@@ -67,22 +68,33 @@ export default function App() {
   const [isRosterManagerOpen, setIsRosterManagerOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
 
-  // Load Roster & Memories on Mount
-  useEffect(() => {
-    async function loadInitialData() {
-      try {
-        const [rosterRes, memoriesRes] = await Promise.all([
-          fetchRoster(),
-          fetchMemories()
-        ]);
-        setStudents(rosterRes.students || AUTHORITATIVE_ROSTER);
-        setMemories(memoriesRes || []);
-      } catch (err) {
-        console.error('Error loading initial data:', err);
-      } finally {
-        setLoading(false);
+  // Load Roster & Memories on Mount, plus check server session (Remember Me)
+  const loadInitialData = async () => {
+    try {
+      const [rosterRes, memoriesRes, sessionRes] = await Promise.all([
+        fetchRoster(),
+        fetchMemories(),
+        checkBatchSession()
+      ]);
+      setStudents(rosterRes.students || AUTHORITATIVE_ROSTER);
+      setMemories(memoriesRes || []);
+
+      if (sessionRes.authenticated && sessionRes.token) {
+        setSession({
+          token: sessionRes.token,
+          authenticated: true,
+        });
+        setIntroStep('authenticated');
+        setIsTitleDocked(true);
       }
+    } catch (err) {
+      console.error('Error loading initial data:', err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadInitialData();
   }, []);
 
@@ -96,16 +108,18 @@ export default function App() {
     setIsTitleDocked(true);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('kmc26_token');
+  const handleLogout = async () => {
+    await logoutBatch();
     setSession({
       token: '',
       authenticated: false,
     });
-    setIntroStep('animating');
-    setIsTitleDocked(false);
+    // Invalidate session, go directly to batch login without re-running intro animation
+    setIntroStep('login');
+    setIsTitleDocked(true);
     setCurrentView('gallery');
     setActiveMemoryId(null);
+    window.history.replaceState(null, '', window.location.pathname);
   };
 
   // Replay the physical handwriting animation
@@ -118,13 +132,6 @@ export default function App() {
         titleRef.current.startAnimation();
       }
     }, 150);
-  };
-
-  const handleSkipIntro = () => {
-    if (titleRef.current) {
-      titleRef.current.skipAnimation();
-    }
-    setIsTitleDocked(true);
   };
 
   // Memory Handlers
@@ -140,6 +147,7 @@ export default function App() {
     date: string;
     category: string;
     password: string;
+    reconstructionMode?: 'original' | 'oil_painting';
     initialPhotos?: { url: string; caption?: string; location?: string; taggedStudentIds?: string[] }[];
   }) => {
     const newMem = await createMemory(data);
@@ -183,21 +191,21 @@ export default function App() {
   const activeMemory = memories.find((m) => m.id === activeMemoryId) || memories[0];
 
   return (
-    <div className="min-h-screen bg-[#F5F0E6] text-[#493D35] font-sans antialiased bg-vintage-paper selection:bg-[#D6C4A8]">
+    <div className="min-h-screen text-[#493D35] font-sans antialiased selection:bg-[#D6C4A8]">
       {/* 
-        CRITICAL PERMANENT HANDWRITTEN TITLE (Section 4):
-        The SAME vector element is preserved throughout the application:
+        CRITICAL PERMANENT HANDWRITTEN TITLE:
         - When !isTitleDocked: Centered on warm paper canvas, written physically by the writing tip.
-        - When isTitleDocked: Smoothly moves, scales down, and docks permanently into the top header.
+        - When isTitleDocked: Moves into the top header and stays in natural document flow.
       */}
       <HandwrittenTitle
         ref={titleRef}
         isDocked={isTitleDocked}
         onWritingComplete={() => {
           setIsTitleDocked(true);
-          if (!session.authenticated && introStep === 'animating') {
-            setIntroStep('message');
-          }
+          setIntroStep('logo_transition');
+          setTimeout(() => {
+            setIntroStep('scrolling_story');
+          }, 1000);
         }}
         onClickLogo={() => {
           if (isTitleDocked) {
@@ -207,31 +215,8 @@ export default function App() {
         }}
       />
 
-      {/* Skip button during centered writing */}
-      {!isTitleDocked && introStep === 'animating' && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-2">
-          <button
-            onClick={() => {
-              if (titleRef.current) titleRef.current.skipAnimation();
-              setIsTitleDocked(true);
-              if (!session.authenticated) {
-                setIntroStep('message');
-              }
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#8B735E] hover:text-[#493D35] bg-[#E8DDC9]/70 hover:bg-[#E8DDC9] rounded-md transition-colors border border-[#D6C4A8]/60 shadow-xs cursor-pointer"
-          >
-            <span>Skip Intro</span>
-            <FastForward className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
-      {/* Persistent Top Navigation Bar (Fades in seamlessly as the handwritten title docks) */}
-      <div
-        className={`transition-opacity duration-700 ${
-          isTitleDocked ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-        }`}
-      >
+      {/* Persistent Top Navigation Bar in Normal Document Flow */}
+      {isTitleDocked && (
         <TopNav
           currentView={currentView}
           isAuthenticated={session.authenticated}
@@ -244,26 +229,28 @@ export default function App() {
           onOpenAbout={() => setIsAboutOpen(true)}
           onLogout={handleLogout}
         />
-      </div>
+      )}
 
-      {/* Main Screen Content (Fades & slides up under the docked header) */}
+      {/* Main Screen Content */}
       <div
-        className={`transition-all duration-700 ease-out ${
+        className={`transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           isTitleDocked
             ? 'opacity-100 translate-y-0 pointer-events-auto'
-            : 'opacity-0 translate-y-8 pointer-events-none'
+            : 'opacity-0 translate-y-6 pointer-events-none'
         }`}
       >
         {!session.authenticated ? (
-          introStep === 'message' ? (
-            <div className="min-h-[calc(100vh-80px)] w-full flex items-center justify-center p-4">
-              <IntroMessageModal onContinue={() => setIntroStep('login')} />
-            </div>
-          ) : (
+          introStep === 'scrolling_story' ? (
+            <ScrollStorytelling onComplete={() => setIntroStep('showing_chronicle')} />
+          ) : introStep === 'showing_chronicle' ? (
+             <div className="min-h-[calc(100vh-80px)] w-full flex items-center justify-center p-4">
+               <IntroMessageModal onContinue={() => setIntroStep('login')} />
+             </div>
+          ) : introStep === 'login' ? (
             <LoginScreen
               onLoginSuccess={handleLoginSuccess}
             />
-          )
+          ) : null
         ) : (
           <main>
             {currentView === 'gallery' ? (
@@ -275,6 +262,7 @@ export default function App() {
                 onUpdateMemory={handleUpdateMemory}
                 onDeleteMemory={handleDeleteMemory}
                 onAddPhotos={handleAddPhotos}
+                onRefresh={loadInitialData}
               />
             ) : (
               activeMemory && (

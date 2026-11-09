@@ -122,46 +122,47 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-[#FCFBF7] w-full max-w-4xl max-h-[90vh] rounded-xl border border-[#D6C4A8] shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 animate-vintage-fade-up">
+      <div className="paper-sheet w-full max-w-4xl max-h-[90vh] rounded-xs border-2 border-[#493D35] shadow-[5px_6px_0px_rgba(73,61,53,0.25)] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 bg-[#E8DDC9]/70 border-b border-[#D6C4A8] flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-4 bg-[#E8DDC9] border-b-1.5 border-[#493D35] flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="font-serif text-lg font-bold text-[#493D35]">
+              <h2 className="font-serif text-base sm:text-lg font-bold text-[#493D35]">
                 Authoritative 150-Student Directory
               </h2>
               {validationReport.status === 'valid' && (
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-[#66715C] bg-[#66715C]/10 px-2 py-0.5 rounded border border-[#66715C]/30">
+                <span className="hidden sm:flex items-center gap-1 text-[11px] font-semibold text-[#66715C] bg-[#66715C]/10 px-2 py-0.5 rounded-xs border border-[#66715C]/40">
                   <ShieldCheck className="w-3.5 h-3.5" />
                   <span>150 Verified</span>
                 </span>
               )}
             </div>
-            <p className="text-xs text-[#8B735E]">
+            <p className="text-[11px] sm:text-xs text-[#8B735E]">
               Sole authoritative source of student identity · Permanent identifiers <code className="font-mono text-[11px]">kmc-001</code> to <code className="font-mono text-[11px]">kmc-150</code>
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-[#8B735E] hover:text-[#493D35] rounded-md transition-colors"
+            aria-label="Close Authoritative Roster Modal"
+            className="p-1.5 text-[#493D35] hover:bg-[#493D35]/10 rounded-xs transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab Controls & Actions */}
-        <div className="px-6 py-3 bg-[#F5F0E6] border-b border-[#D6C4A8]/60 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="px-6 py-3 bg-[#E8DDC9]/40 border-b border-[#493D35]/30 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
                 setMode('view');
                 setStatusMessage(null);
               }}
-              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-xs font-serif font-bold transition-all cursor-pointer ${
                 mode === 'view'
-                  ? 'bg-white text-[#493D35] shadow-xs border border-[#D6C4A8]'
-                  : 'text-[#8B735E] hover:text-[#493D35]'
+                  ? 'bg-[#493D35] text-[#FAF6EE] border-1.5 border-[#493D35] shadow-[2px_2px_0px_rgba(73,61,53,0.3)]'
+                  : 'bg-transparent text-[#493D35] border-1.5 border-dashed border-[#493D35]/50 hover:border-[#493D35]'
               }`}
             >
               Roster Directory ({students.length})
@@ -171,10 +172,10 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
                 setMode('validation_report');
                 setStatusMessage(null);
               }}
-              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-xs font-serif font-bold transition-all cursor-pointer ${
                 mode === 'validation_report'
-                  ? 'bg-white text-[#493D35] shadow-xs border border-[#D6C4A8]'
-                  : 'text-[#8B735E] hover:text-[#493D35]'
+                  ? 'bg-[#493D35] text-[#FAF6EE] border-1.5 border-[#493D35] shadow-[2px_2px_0px_rgba(73,61,53,0.3)]'
+                  : 'bg-transparent text-[#493D35] border-1.5 border-dashed border-[#493D35]/50 hover:border-[#493D35]'
               }`}
             >
               Validation Report
@@ -184,10 +185,10 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
                 setMode('bulk_paste');
                 setStatusMessage(null);
               }}
-              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-xs font-serif font-bold transition-all cursor-pointer ${
                 mode === 'bulk_paste'
-                  ? 'bg-white text-[#493D35] shadow-xs border border-[#D6C4A8]'
-                  : 'text-[#8B735E] hover:text-[#493D35]'
+                  ? 'bg-[#493D35] text-[#FAF6EE] border-1.5 border-[#493D35] shadow-[2px_2px_0px_rgba(73,61,53,0.3)]'
+                  : 'bg-transparent text-[#493D35] border-1.5 border-dashed border-[#493D35]/50 hover:border-[#493D35]'
               }`}
             >
               Replace Roster (150 Names)
@@ -197,7 +198,7 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
           <div className="flex items-center gap-2">
             <button
               onClick={handleCopyCurrentList}
-              className="px-2.5 py-1 text-xs text-[#8B735E] hover:text-[#493D35] flex items-center gap-1 hover:underline"
+              className="ink-button-subtle text-xs py-1 px-2.5 flex items-center gap-1"
             >
               <Copy className="w-3.5 h-3.5" />
               <span>Copy 150 Names</span>
@@ -205,7 +206,7 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
             <button
               onClick={handleRestoreHardcodedAuthoritative}
               disabled={isSaving}
-              className="px-2.5 py-1 text-xs text-[#8B735E] hover:text-[#493D35] flex items-center gap-1 hover:underline"
+              className="ink-button-subtle text-xs py-1 px-2.5 flex items-center gap-1"
               title="Reload hardcoded authoritative list"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -236,7 +237,7 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
         <div className="flex-1 overflow-y-auto p-6">
           {mode === 'validation_report' ? (
             <div className="space-y-4">
-              <div className="p-4 bg-[#FCFBF7] rounded-xl border border-[#D6C4A8] shadow-xs">
+              <div className="p-4 bg-[#FAF6EE] rounded-xs border-1.5 border-[#493D35] shadow-[2px_3px_0px_rgba(73,61,53,0.15)]">
                 <div className="flex items-center gap-2 mb-3">
                   <ShieldCheck className="w-5 h-5 text-[#66715C]" />
                   <h3 className="font-serif font-bold text-sm text-[#493D35]">
@@ -245,50 +246,50 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs mb-4">
-                  <div className="p-3 bg-white rounded-lg border border-[#D6C4A8]/60">
+                  <div className="p-3 bg-transparent rounded-xs border border-[#493D35]/40">
                     <span className="text-[#8B735E] block">Total Student Count</span>
                     <strong className="text-[#493D35] text-base font-mono">
                       {validationReport.totalCount} / 150
                     </strong>
-                    <span className="text-[11px] text-[#66715C] block mt-0.5">
+                    <span className="text-[11px] text-[#66715C] block mt-0.5 font-medium">
                       {validationReport.isExact150 ? '✓ Exactly 150 students present' : '✗ Count mismatch'}
                     </span>
                   </div>
 
-                  <div className="p-3 bg-white rounded-lg border border-[#D6C4A8]/60">
+                  <div className="p-3 bg-transparent rounded-xs border border-[#493D35]/40">
                     <span className="text-[#8B735E] block">Unique Internal Identifiers</span>
                     <strong className="text-[#493D35] text-base font-mono">
                       {validationReport.uniqueIdsCount} / 150
                     </strong>
-                    <span className="text-[11px] text-[#66715C] block mt-0.5">
+                    <span className="text-[11px] text-[#66715C] block mt-0.5 font-medium">
                       {validationReport.allIdsUnique ? '✓ 100% unique IDs (kmc-001 - kmc-150)' : '✗ Duplicate IDs found'}
                     </span>
                   </div>
 
-                  <div className="p-3 bg-white rounded-lg border border-[#D6C4A8]/60">
+                  <div className="p-3 bg-transparent rounded-xs border border-[#493D35]/40">
                     <span className="text-[#8B735E] block">Order &amp; Sequence Integrity</span>
                     <strong className="text-[#493D35] text-base font-mono">
                       {validationReport.orderPreserved ? 'Preserved (1 - 150)' : 'Altered'}
                     </strong>
-                    <span className="text-[11px] text-[#66715C] block mt-0.5">
+                    <span className="text-[11px] text-[#66715C] block mt-0.5 font-medium">
                       {validationReport.orderPreserved ? '✓ Sequential index matching' : '✗ Sequence error'}
                     </span>
                   </div>
 
-                  <div className="p-3 bg-white rounded-lg border border-[#D6C4A8]/60">
+                  <div className="p-3 bg-transparent rounded-xs border border-[#493D35]/40">
                     <span className="text-[#8B735E] block">Duplicate Name Inspection</span>
                     <strong className="text-[#493D35] text-base font-mono">
                       {validationReport.duplicateNames.length === 0 ? '0 Duplicates' : `${validationReport.duplicateNames.length} Duplicates`}
                     </strong>
-                    <span className="text-[11px] text-[#66715C] block mt-0.5">
+                    <span className="text-[11px] text-[#66715C] block mt-0.5 font-medium">
                       {validationReport.duplicateNames.length === 0 ? '✓ All 150 names distinct' : `Reported: ${validationReport.duplicateNames.join(', ')}`}
                     </span>
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-[#D6C4A8]/40 text-xs">
-                  <h4 className="font-semibold text-[#493D35] mb-1.5">Verification Checklist:</h4>
-                  <ul className="space-y-1 text-[#8B735E] list-disc list-inside">
+                <div className="pt-3 border-t border-[#493D35]/20 text-xs">
+                  <h4 className="font-serif font-bold text-[#493D35] mb-1.5">Verification Checklist:</h4>
+                  <ul className="space-y-1 text-[#493D35]/80 list-disc list-inside">
                     <li>Total student count = exactly 150 (Checked: {students.length})</li>
                     <li>Every supplied name is present and matches original text</li>
                     <li>Original order preserved (#1 AADHARSH S P through #150 YOHITH PRAJAN E)</li>
@@ -304,13 +305,13 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
             <div>
               <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-[#8B735E]">
                 <div className="relative w-full sm:w-72">
-                  <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-[#8B735E]" />
+                  <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-[#493D35]/60" />
                   <input
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search 150 students by name or roll..."
-                    className="w-full pl-9 pr-3.5 py-1.5 bg-white border border-[#D6C4A8] rounded-lg text-xs text-[#493D35] placeholder:text-[#8B735E]/60 focus:outline-none focus:ring-1 focus:ring-[#8B735E]"
+                    className="w-full pl-9 pr-3.5 py-1.5 bg-transparent border-1.5 border-[#493D35] rounded-xs text-xs text-[#493D35] placeholder:text-[#8B735E]/60 focus:outline-none focus:ring-1 focus:ring-[#493D35]"
                   />
                 </div>
 
@@ -320,7 +321,7 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
                   </span>
                   <button
                     onClick={() => setMode('validation_report')}
-                    className="text-[#66715C] hover:underline flex items-center gap-1 font-medium"
+                    className="text-[#66715C] hover:underline flex items-center gap-1 font-serif font-semibold cursor-pointer"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>View Validation Report</span>
@@ -328,15 +329,15 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
                 </div>
               </div>
 
-              <div className="border border-[#D6C4A8] rounded-lg overflow-hidden bg-white shadow-xs">
-                <div className="grid grid-cols-12 bg-[#E8DDC9]/50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[#8B735E] border-b border-[#D6C4A8]">
+              <div className="border-1.5 border-[#493D35] rounded-xs overflow-hidden bg-[#FAF6EE] shadow-[2px_3px_0px_rgba(73,61,53,0.15)]">
+                <div className="grid grid-cols-12 bg-[#E8DDC9] px-4 py-2.5 text-[11px] font-serif font-bold uppercase tracking-wider text-[#493D35] border-b-1.5 border-[#493D35]">
                   <div className="col-span-2">Internal ID</div>
                   <div className="col-span-1">No.</div>
                   <div className="col-span-7">Authoritative Student Name</div>
                   <div className="col-span-2 text-right">Verification</div>
                 </div>
 
-                <div className="divide-y divide-[#D6C4A8]/40 max-h-[50vh] overflow-y-auto font-sans text-xs">
+                <div className="divide-y divide-[#493D35]/20 max-h-[50vh] overflow-y-auto font-sans text-xs">
                   {filteredStudents.length === 0 ? (
                     <div className="p-6 text-center text-[#8B735E]">
                       No student matches &quot;{searchTerm}&quot;.
@@ -345,7 +346,7 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
                     filteredStudents.map((student) => (
                       <div
                         key={student.id}
-                        className="grid grid-cols-12 px-4 py-2.5 items-center hover:bg-[#F5F0E6]/50 transition-colors"
+                        className="grid grid-cols-12 px-4 py-2.5 items-center hover:bg-[#E8DDC9]/30 transition-colors"
                       >
                         <div className="col-span-2 font-mono text-[11px] text-[#8B735E]">
                           {student.id}
@@ -357,7 +358,7 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
                           {student.name}
                         </div>
                         <div className="col-span-2 text-right text-[11px]">
-                          <span className="text-[#66715C] font-medium flex items-center justify-end gap-1">
+                          <span className="text-[#66715C] font-semibold flex items-center justify-end gap-1">
                             <Check className="w-3 h-3" />
                             <span>Authoritative</span>
                           </span>
@@ -371,7 +372,7 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
           ) : (
             <div>
               <div className="mb-3">
-                <h3 className="text-sm font-semibold text-[#493D35]">
+                <h3 className="text-sm font-serif font-bold text-[#493D35]">
                   Replace Roster with Exact 150 Names
                 </h3>
                 <p className="mt-1 text-xs text-[#8B735E] leading-relaxed">
@@ -389,7 +390,7 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
                   }}
                   rows={14}
                   placeholder={`1. AADHARSH S P\n2. AASHAN V\n...\n150. YOHITH PRAJAN E`}
-                  className="w-full p-4 font-mono text-xs text-[#493D35] bg-white border border-[#D6C4A8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#8B735E] leading-relaxed"
+                  className="w-full p-4 font-mono text-xs text-[#493D35] bg-transparent border-1.5 border-[#493D35] rounded-xs focus:outline-none focus:ring-1 focus:ring-[#493D35] leading-relaxed"
                 />
 
                 <div className="mt-2 flex items-center justify-between text-xs">
@@ -406,7 +407,7 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
                   <button
                     onClick={handleApplyRoster}
                     disabled={!isExact150 || isSaving}
-                    className="px-4 py-2 bg-[#493D35] hover:bg-[#382E28] text-[#F5F0E6] rounded-lg font-medium transition-colors disabled:opacity-40 flex items-center gap-1.5 shadow-xs"
+                    className="ink-button text-xs py-2 px-4 flex items-center gap-1.5"
                   >
                     <span>{isSaving ? 'Applying...' : 'Apply Authoritative Roster'}</span>
                     <Check className="w-3.5 h-3.5" />
@@ -418,11 +419,11 @@ export const AuthoritativeRosterModal: React.FC<AuthoritativeRosterModalProps> =
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 bg-[#E8DDC9]/50 border-t border-[#D6C4A8] flex items-center justify-between text-xs text-[#8B735E]">
-          <span>KMCult&apos;26 Directory Policy: Sole Source of Batch Identity (150 Students)</span>
+        <div className="px-6 py-3 bg-[#E8DDC9] border-t-1.5 border-[#493D35] flex items-center justify-between text-xs text-[#493D35]">
+          <span className="font-serif">KMCult&apos;26 Directory Policy: Sole Source of Batch Identity (150 Students)</span>
           <button
             onClick={onClose}
-            className="px-3 py-1 bg-white border border-[#D6C4A8] rounded text-[#493D35] hover:bg-[#F5F0E6]"
+            className="ink-button-subtle text-xs py-1 px-3"
           >
             Close
           </button>

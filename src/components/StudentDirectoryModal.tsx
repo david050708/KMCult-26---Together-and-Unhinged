@@ -43,36 +43,37 @@ export const StudentDirectoryModal: React.FC<StudentDirectoryModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-[#FCFBF7] w-full max-w-3xl max-h-[85vh] rounded-xl border border-[#D6C4A8] shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 animate-vintage-fade-up">
+      <div className="paper-sheet w-full max-w-3xl max-h-[90vh] sm:max-h-[85vh] rounded-xs border-2 border-[#493D35] shadow-[5px_6px_0px_rgba(73,61,53,0.25)] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 bg-[#E8DDC9]/70 border-b border-[#D6C4A8] flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-4 bg-[#E8DDC9] border-b-1.5 border-[#493D35] flex items-center justify-between">
           <div>
-            <h2 className="font-serif text-lg font-bold text-[#493D35]">
+            <h2 className="font-serif text-base sm:text-lg font-bold text-[#493D35]">
               Classmate Directory
             </h2>
-            <p className="text-xs text-[#8B735E]">
-              150 MBBS Students · Permanent Identifiers · Collective Chronicle Tagging
+            <p className="text-[11px] sm:text-xs text-[#8B735E]">
+              150 MBBS Students · Permanent Identifiers · Collective Tagging
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-[#8B735E] hover:text-[#493D35] rounded-md transition-colors"
+            aria-label="Close Directory Modal"
+            className="p-1.5 text-[#493D35] hover:bg-[#493D35]/10 rounded-xs transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Search */}
-        <div className="p-4 bg-[#F5F0E6] border-b border-[#D6C4A8]/60">
+        <div className="p-4 bg-transparent border-b border-[#493D35]/30">
           <div className="relative">
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-[#8B735E]" />
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-[#8B735E] pointer-events-none" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search classmates by name or roll index (e.g., #042)..."
-              className="w-full pl-9 pr-4 py-2 bg-white border border-[#D6C4A8] rounded-lg text-xs text-[#493D35] placeholder:text-[#8B735E]/60 focus:outline-none focus:ring-1 focus:ring-[#8B735E]"
+              className="w-full pl-9 pr-4 py-2 text-xs text-[#493D35]"
             />
           </div>
         </div>
@@ -80,7 +81,7 @@ export const StudentDirectoryModal: React.FC<StudentDirectoryModalProps> = ({
         {/* Content Split: Left List / Right Student Profile & Tagged Memories */}
         <div className="flex-1 grid grid-cols-1 md:grid-cols-12 overflow-hidden">
           {/* Student List */}
-          <div className="md:col-span-7 border-r border-[#D6C4A8]/60 overflow-y-auto divide-y divide-[#D6C4A8]/30 max-h-[50vh] md:max-h-[60vh] bg-white">
+          <div className="md:col-span-7 border-r border-[#493D35]/30 overflow-y-auto divide-y divide-[#493D35]/20 max-h-[50vh] md:max-h-[60vh] bg-transparent">
             {filteredStudents.length === 0 ? (
               <div className="p-6 text-center text-xs text-[#8B735E]">
                 No student matches &quot;{searchTerm}&quot;.
@@ -201,11 +202,11 @@ export const StudentDirectoryModal: React.FC<StudentDirectoryModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 bg-[#E8DDC9]/50 border-t border-[#D6C4A8] flex items-center justify-between text-xs text-[#8B735E]">
+        <div className="px-6 py-3 bg-[#E8DDC9]/70 border-t border-[#493D35]/30 flex items-center justify-between text-xs text-[#8B735E]">
           <span>Central MBBS 2026 Directory</span>
           <button
             onClick={onClose}
-            className="px-3 py-1 bg-white border border-[#D6C4A8] rounded text-[#493D35] hover:bg-[#F5F0E6]"
+            className="ink-button-subtle text-xs"
           >
             Close
           </button>
