@@ -25,6 +25,7 @@ import {
   type ServerMemory,
   type StorageOperation
 } from './server/stateManager.ts';
+import { isOwnedOciPhotoKey, isOwnedLocalPhotoFile } from './server/photoOwnership.ts';
 import { signMemoryToken, verifyMemoryToken } from './server/sessionHelper.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -181,26 +182,14 @@ async function deletePhotographStorageObject(
   memoryId?: string,
   opId?: string
 ) {
-  // Clean up local uploads if applicable
-  if (photo.url && photo.url.startsWith('/uploads/')) {
-    try {
-      const fileName = path.basename(photo.url);
-      const filePath = path.join(__dirname, 'data', 'uploads', fileName);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    } catch {}
-  }
-
-  // Also clean up by memoryId and photo.id in data/uploads
+  // Select local files only by the server-created memory/photo namespace.
+  // A submitted display URL never grants permission to delete a local file.
   const uploadsDir = path.join(__dirname, 'data', 'uploads');
-  if (fs.existsSync(uploadsDir) && memoryId && photo.id) {
+  if (photo.url && fs.existsSync(uploadsDir) && memoryId && photo.id) {
     try {
-      const files = fs.readdirSync(uploadsDir);
-      const prefix = `${memoryId}_${photo.id}`;
-      for (const f of files) {
-        if (f.startsWith(prefix)) {
-          try { fs.unlinkSync(path.join(uploadsDir, f)); } catch {}
+      for (const file of fs.readdirSync(uploadsDir)) {
+        if (isOwnedLocalPhotoFile(file, memoryId, photo.id)) {
+          try { fs.unlinkSync(path.join(uploadsDir, file)); } catch {}
         }
       }
     } catch {}
@@ -221,7 +210,7 @@ async function deletePhotographStorageObject(
     key = photo.url;
   }
 
-  if (key) {
+  if (key && isOwnedOciPhotoKey(key, memoryId, photo.id)) {
     try {
       await deleteFromOci(key);
       if (opId) await updateOperationStatus(opId, 'completed');
@@ -243,7 +232,7 @@ async function retryPendingOperations() {
 
   for (const op of pending) {
     const keyToDelete = op.oldOciObjectKey || op.newOciObjectKey;
-    if (keyToDelete) {
+    if (keyToDelete && isOwnedOciPhotoKey(keyToDelete, op.memoryId, op.photoId)) {
       try {
         await deleteFromOci(keyToDelete);
         await updateOperationStatus(op.id, 'completed');
@@ -885,7 +874,7 @@ app.put('/api/memories/:id/photos/:photoId', requireMemoryEditAuth, async (req, 
       newOciObjectKey: newSaved.ociObjectKey
     });
     try {
-      await deletePhotographStorageObject({ ociObjectKey: oldPhotoRef.ociObjectKey }, memoryId, op.id);
+      await deletePhotographStorageObject({ id: photoId, ociObjectKey: oldPhotoRef.ociObjectKey }, memoryId, op.id);
     } catch {}
   }
 
